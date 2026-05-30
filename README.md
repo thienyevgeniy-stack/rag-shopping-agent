@@ -41,6 +41,21 @@ cd D:\RAG
 .\scripts\test_backend.ps1
 ```
 
+灌入 Chroma 向量库（可选；未启用时默认使用 JSON fallback）：
+
+```powershell
+cd D:\RAG
+pip install -r server\requirements.txt
+python -m server.rag.ingest
+```
+
+启用 Chroma：
+
+```powershell
+$env:USE_CHROMA="true"
+.\scripts\run_server.ps1
+```
+
 健康检查：
 
 ```powershell

@@ -8,7 +8,7 @@ from server.agent.query_rewriter import rewrite_query
 from server.config import get_settings
 from server.inputs.processors import TextProcessor
 from server.rag.post_process import SearchFilters
-from server.rag.vector_store import LocalJsonVectorStore
+from server.rag.vector_store import ChromaStore, LocalJsonVectorStore, load_product_documents
 from server.session.state import FilterCondition, SessionStore
 from server.tools.product_search import ProductSearchTool
 from server.tools.registry import ToolRegistry
@@ -116,7 +116,19 @@ def build_grounded_answer(message: str, cards: list[dict], intent: str) -> str:
 @lru_cache
 def get_orchestrator() -> Orchestrator:
     settings = get_settings()
-    store = LocalJsonVectorStore(settings.product_data_file)
+    store = create_store(settings)
     registry = ToolRegistry()
     registry.register(ProductSearchTool(store))
     return Orchestrator(registry=registry, sessions=SessionStore())
+
+
+def create_store(settings):
+    if settings.use_chroma:
+        try:
+            store = ChromaStore(settings.chroma_path)
+            if store.count() == 0:
+                store.add(load_product_documents(settings.product_data_file))
+            return store
+        except RuntimeError as exc:
+            print(f"Chroma unavailable, falling back to local JSON search: {exc}")
+    return LocalJsonVectorStore(settings.product_data_file)

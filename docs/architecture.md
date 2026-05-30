@@ -19,11 +19,15 @@ Android Compose
 
 ## 后端扩展点
 
-- `VectorStore`：当前是 `LocalJsonVectorStore`，后续替换为 `ChromaStore`
+- `VectorStore`：当前支持 `LocalJsonVectorStore` 和 `ChromaStore`。未安装 Chroma 或未启用时使用 JSON fallback；设置 `USE_CHROMA=true` 后走 Chroma。
 - `ToolRegistry`：当前注册 `search_products`，后续增加 `add_to_cart`、`checkout`
 - `InputProcessor`：当前是 `TextProcessor`，后续增加 `ASRProcessor`、`VLMProcessor`
 - `PostProcessor`：当前有 `RangeFilter`、`ExclusionFilter`，后续增加 `ComparisonAggregator`
 - SSE 事件：当前支持 `token`、`product_card`、`done`，后续增加 `cart_update`、`comparison_card`
+
+## Chroma 接入
+
+`server.rag.ingest` 会读取 `data/products_ref.json`，把统一商品文档写入 `server/chroma_db`。当前 embedding 使用本地 hashing embedding，用来先跑通向量库持久化链路；后续接 Doubao embedding 时只需要替换 `HashingEmbeddingFunction`。
 
 ## 防幻觉策略
 

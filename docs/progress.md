@@ -30,6 +30,9 @@
 - [x] 接入参考数据集 zip，清洗生成 100 条正式商品数据
 - [x] 后端默认数据源切换为 `data/products_ref.json`
 - [x] 增加关键词后处理，减少跨类目误召回
+- [x] ChromaStore 适配层
+- [x] Chroma 灌库脚本 `python -m server.rag.ingest`
+- [x] `USE_CHROMA=true` 可启用 Chroma，默认保留 JSON fallback
 
 ## 已验证
 
@@ -58,7 +61,7 @@ Android 真机 App
 
 ## 当前限制
 
-- [ ] 还未接入 Chroma 向量库
+- [ ] Chroma 已接入，但当前 embedding 仍是本地 hashing embedding
 - [ ] 还未接入 Doubao embedding
 - [ ] 还未接入 Doubao-Seed 生成回答
 - [ ] 多轮对话目前是结构预留，尚未做完整查询改写
@@ -68,7 +71,7 @@ Android 真机 App
 ## 下一步
 
 1. 做第一次 Git commit，固定当前“真机 + 100 条参考集”节点。
-2. 接入 Chroma，并保留本地 JSON fallback。
-3. 接入 embedding，把关键词检索升级为向量检索。
+2. 安装并验证 Chroma 运行环境。
+3. 接入 Doubao embedding，把本地 hashing embedding 替换为真实语义向量。
 4. 接入 Doubao-Seed 生成回答，继续严格使用检索上下文防幻觉。
 5. 做深多轮上下文与反选解析。
