@@ -89,7 +89,7 @@ class KeywordFilter:
             if all(keyword in haystack for keyword in required):
                 filtered.append(hit)
 
-        return filtered or hits
+        return filtered
 
 
 class ComparisonAggregator:

@@ -6,8 +6,8 @@
 
 - 已搭建 monorepo 结构：`client/`、`server/`、`docs/`、`data/`、`scripts/`
 - 后端提供 `/health` 和 `/chat` SSE 接口
-- 后端内置本地 JSON 商品检索 fallback，后续可替换为 Chroma
-- Android 端已预留 Compose 对话页、SSE 客户端、商品卡片模型
+- 后端支持本地 JSON 商品检索 fallback，也可通过 `USE_CHROMA=true` 启用 Chroma
+- Android 端已实现 Compose 对话页、SSE 客户端和商品卡片展示
 - 真实 API Key 通过 `.env` 管理，不进入 Git
 
 ## 目录结构

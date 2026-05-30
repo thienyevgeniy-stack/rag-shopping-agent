@@ -10,7 +10,7 @@ class ProductSearchTool:
         self.post_processors = [RangeFilter(), KeywordFilter(), ExclusionFilter()]
 
     def run(self, query: str, filters: SearchFilters, top_k: int = 5) -> list[dict]:
-        hits = self.store.query(query=query, top_k=top_k * 3)
+        hits = self.store.query(query=query, top_k=max(top_k * 10, 50))
         for processor in self.post_processors:
             hits = processor.apply(hits, filters)
         return [to_product_card(hit, query) for hit in hits[:top_k]]

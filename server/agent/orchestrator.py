@@ -78,18 +78,20 @@ def extract_filters(message: str) -> list[FilterCondition]:
         if keyword in message:
             filters.append(FilterCondition(kind="keyword", value=keyword))
 
-    exclusion_patterns = [
-        r"不要([^，。,.]+)",
-        r"不想要([^，。,.]+)",
-        r"除了([^，。,.]+)",
-        r"排除([^，。,.]+)",
-    ]
-    for pattern in exclusion_patterns:
-        match = re.search(pattern, message)
-        if match:
-            filters.append(FilterCondition(kind="exclude", value=match.group(1).strip()))
+    exclusion_pattern = r"(?:不要|不想要|除了|排除)([^，。,.]+)"
+    for match in re.finditer(exclusion_pattern, message):
+        value = normalize_exclusion(match.group(1))
+        if value:
+            filters.append(FilterCondition(kind="exclude", value=value))
 
     return filters
+
+
+def normalize_exclusion(value: str) -> str:
+    value = value.strip().removesuffix("的").strip()
+    if value.startswith("含") and len(value) > 1:
+        value = value[1:].strip()
+    return value
 
 
 def build_grounded_answer(message: str, cards: list[dict], intent: str) -> str:

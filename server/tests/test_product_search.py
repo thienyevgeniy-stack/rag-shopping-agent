@@ -37,3 +37,15 @@ def test_product_search_excludes_brand() -> None:
     )
 
     assert all(card["brand"] != "芳珂" for card in cards)
+
+
+def test_product_search_does_not_relax_required_keywords_to_unrelated_items() -> None:
+    tool = make_tool()
+
+    cards = tool.run(
+        query="预算500以内 跑鞋 轻量",
+        filters=SearchFilters(max_price=500, keywords=["跑鞋", "轻量"]),
+        top_k=5,
+    )
+
+    assert cards == []
