@@ -1,0 +1,40 @@
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Runtime data
+server/chroma_db/
+server/.chroma/
+data/processed/
+*.log
+~$*
+*.tmp
+*.docx
+*.zip
+
+# Source handouts may contain shared API keys.
+*.pdf
+
+# Android / Gradle
+client/.gradle/
+client/build/
+client/app/build/
+*.apk
+*.aab
+local.properties
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

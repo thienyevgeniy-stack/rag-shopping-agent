@@ -1,0 +1,109 @@
+[
+  {
+    "id": "p001",
+    "name": "清爽控油氨基酸洗面奶",
+    "category": "护肤/洁面",
+    "brand": "PureLab",
+    "price": 79,
+    "stock": 120,
+    "image_url": "https://example.com/images/cleanser-oil-control.jpg",
+    "detail_url": "https://example.com/products/p001",
+    "tags": ["油皮", "控油", "氨基酸", "温和", "洁面"],
+    "attributes": {
+      "skin_type": "油皮",
+      "alcohol_free": true,
+      "origin": "中国",
+      "texture": "泡沫"
+    },
+    "description": "适合油皮和混油皮的氨基酸洁面，主打清爽控油和温和清洁，洗后不紧绷。"
+  },
+  {
+    "id": "p002",
+    "name": "敏感肌舒缓洁面乳",
+    "category": "护肤/洁面",
+    "brand": "CalmSkin",
+    "price": 129,
+    "stock": 80,
+    "image_url": "https://example.com/images/cleanser-sensitive.jpg",
+    "detail_url": "https://example.com/products/p002",
+    "tags": ["敏感肌", "舒缓", "无酒精", "低刺激", "洁面"],
+    "attributes": {
+      "skin_type": "敏感肌",
+      "alcohol_free": true,
+      "origin": "中国",
+      "texture": "乳液"
+    },
+    "description": "低刺激洁面乳，适合敏感肌日常清洁，配方不含酒精和强皂基。"
+  },
+  {
+    "id": "p003",
+    "name": "轻量缓震跑鞋",
+    "category": "运动/跑鞋",
+    "brand": "RunPeak",
+    "price": 459,
+    "stock": 62,
+    "image_url": "https://example.com/images/running-shoes-light.jpg",
+    "detail_url": "https://example.com/products/p003",
+    "tags": ["跑鞋", "轻量", "缓震", "500以内", "通勤"],
+    "attributes": {
+      "weight": "轻量",
+      "cushion": "中高",
+      "origin": "中国",
+      "gender": "通用"
+    },
+    "description": "适合日常慢跑和通勤训练的轻量跑鞋，中底回弹稳定，预算 500 元以内。"
+  },
+  {
+    "id": "p004",
+    "name": "专业竞速跑鞋",
+    "category": "运动/跑鞋",
+    "brand": "NexStep",
+    "price": 899,
+    "stock": 34,
+    "image_url": "https://example.com/images/racing-shoes.jpg",
+    "detail_url": "https://example.com/products/p004",
+    "tags": ["跑鞋", "竞速", "碳板", "轻量", "比赛"],
+    "attributes": {
+      "weight": "超轻",
+      "cushion": "高",
+      "origin": "中国",
+      "gender": "通用"
+    },
+    "description": "面向半马和竞速训练的碳板跑鞋，适合明确追求速度的用户。"
+  },
+  {
+    "id": "p005",
+    "name": "主动降噪蓝牙耳机",
+    "category": "数码/耳机",
+    "brand": "SoundGo",
+    "price": 199,
+    "stock": 210,
+    "image_url": "https://example.com/images/anc-earbuds.jpg",
+    "detail_url": "https://example.com/products/p005",
+    "tags": ["蓝牙耳机", "降噪", "200以下", "通勤", "长续航"],
+    "attributes": {
+      "noise_canceling": true,
+      "battery_hours": 28,
+      "color": "白色"
+    },
+    "description": "200 元以内主动降噪蓝牙耳机，适合通勤和在线会议，综合续航约 28 小时。"
+  },
+  {
+    "id": "p006",
+    "name": "高保湿修护面霜",
+    "category": "护肤/面霜",
+    "brand": "MoistCare",
+    "price": 168,
+    "stock": 95,
+    "image_url": "https://example.com/images/moisturizer.jpg",
+    "detail_url": "https://example.com/products/p006",
+    "tags": ["面霜", "保湿", "修护", "干皮", "无酒精"],
+    "attributes": {
+      "skin_type": "干皮",
+      "alcohol_free": true,
+      "origin": "中国",
+      "texture": "霜"
+    },
+    "description": "偏滋润的保湿修护面霜，适合干皮或换季屏障脆弱时使用。"
+  }
+]
