@@ -14,6 +14,7 @@ Android Compose
   -> ToolRegistry.search_products
   -> VectorStore
   -> PostProcessor
+  -> Doubao/Ark LLM 或模板 fallback
   -> SSE token/product_card/done
 ```
 
@@ -23,6 +24,7 @@ Android Compose
 - `ToolRegistry`：当前注册 `search_products`，后续增加 `add_to_cart`、`checkout`
 - `InputProcessor`：当前是 `TextProcessor`，后续增加 `ASRProcessor`、`VLMProcessor`
 - `PostProcessor`：当前有 `RangeFilter`、`ExclusionFilter`，后续增加 `ComparisonAggregator`
+- `LLMClient`：当前支持 Ark OpenAI-compatible `/chat/completions` 流式接口；`USE_LLM=true` 且 `ARK_API_KEY` 存在时启用。
 - SSE 事件：当前支持 `token`、`product_card`、`done`，后续增加 `cart_update`、`comparison_card`
 
 ## Chroma 接入
@@ -38,3 +40,14 @@ Android Compose
 - 价格、品牌、落地页来自 metadata，不由模型自由生成
 
 接入大模型后，系统提示词仍要求只能依据检索上下文回答。
+
+## Doubao/Ark 生成接入
+
+`server.llm.ark_client.ArkChatClient` 负责调用 Ark OpenAI-compatible chat completions 接口。`server.llm.prompt` 会把检索得到的商品卡片整理为上下文，并在系统提示词中约束：
+
+- 只能推荐候选商品中的商品
+- 不编造优惠、库存、销量、功效或外部评价
+- 价格、品牌、类目必须来自商品 metadata
+- 候选商品不完全匹配时要如实说明
+
+Orchestrator 会先完成 RAG 检索和后处理，再调用 LLM 生成自然语言回答。如果 LLM 未配置或调用失败，则回退到本地模板回答，保证 Demo 可用性。

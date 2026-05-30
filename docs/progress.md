@@ -36,6 +36,9 @@
 - [x] 已完成 Git 提交：`6dbb121`、`92751b5`
 - [x] 严格关键词过滤：无严格匹配时降级说明，不返回无关商品
 - [x] 一句话多重反选解析：如“不要含酒精的，也不要日系品牌”
+- [x] Doubao/Ark LLM 客户端接入：`USE_LLM=true` 时基于 RAG 商品上下文生成回答
+- [x] LLM 调用失败或未配置 API Key 时自动回退本地模板回答
+- [x] 防幻觉 prompt：约束只基于候选商品回答，不编造价格、优惠、库存或功效
 
 ## 已验证
 
@@ -48,6 +51,7 @@
 - [x] 手机 App 输入后能通过后端返回 PureLab 商品结果
 - [x] 参考集查询验证：保湿眼霜可返回科颜氏/AHC 商品卡片
 - [x] PDF 典型多轮场景回归：跑鞋 -> 轻量 -> 预算 500 以内，无严格匹配时不返回食品等无关商品
+- [x] LLM mock 测试：正常流式生成、失败回退、无商品时跳过 LLM
 
 ## 当前状态
 
@@ -67,15 +71,15 @@ Android 真机 App
 
 - [ ] Chroma 已接入，但当前 embedding 仍是本地 hashing embedding
 - [ ] 还未接入 Doubao embedding
-- [ ] 还未接入 Doubao-Seed 生成回答
+- [ ] Doubao-Seed 生成回答代码已接入，仍需填入本地 `ARK_API_KEY` 做真实接口联调
 - [ ] 多轮对话目前是结构预留，尚未做完整查询改写
 - [ ] 购物车、多模态、商品对比仍是接口预留
 - [ ] Android 商品卡片暂未渲染主图，`detail_url` 仍为空时无法真实跳转落地页
 
 ## 下一步
 
-1. 接入 Doubao embedding，把本地 hashing embedding 替换为真实语义向量。
-2. 接入 Doubao-Seed 生成回答，继续严格使用检索上下文防幻觉。
+1. 在本地 `.env` 填入 `ARK_API_KEY`，开启 `USE_LLM=true` 做 Doubao-Seed 真实接口联调。
+2. 接入 Doubao embedding，把本地 hashing embedding 替换为真实语义向量。
 3. 完善多轮查询改写与主动澄清。
 4. 在 Android 商品卡片中渲染主图，并补齐可点击落地页。
 5. 从购物车、多模态、商品对比中选择 1-2 个加分项深入实现。

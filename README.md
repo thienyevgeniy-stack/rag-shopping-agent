@@ -7,6 +7,7 @@
 - 已搭建 monorepo 结构：`client/`、`server/`、`docs/`、`data/`、`scripts/`
 - 后端提供 `/health` 和 `/chat` SSE 接口
 - 后端支持本地 JSON 商品检索 fallback，也可通过 `USE_CHROMA=true` 启用 Chroma
+- 后端可通过 `USE_LLM=true` 接入 Doubao/Ark 生成回答，失败时自动回退模板回答
 - Android 端已实现 Compose 对话页、SSE 客户端和商品卡片展示
 - 真实 API Key 通过 `.env` 管理，不进入 Git
 
@@ -55,6 +56,16 @@ python -m server.rag.ingest
 $env:USE_CHROMA="true"
 .\scripts\run_server.ps1
 ```
+
+启用 Doubao/Ark 生成回答：
+
+```powershell
+# 先在 .env 中填入 ARK_API_KEY，不要提交 .env
+$env:USE_LLM="true"
+.\scripts\run_server.ps1
+```
+
+如果未配置 `ARK_API_KEY` 或模型调用失败，后端会自动回退到本地模板回答，`/chat` 不会因此中断。
 
 健康检查：
 

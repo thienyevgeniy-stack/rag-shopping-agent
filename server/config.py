@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     ark_api_key: str = ""
     ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
     ark_model: str = "ep-20260514111645-lmgt2"
+    use_llm: bool = False
+    llm_timeout_seconds: float = 45.0
 
     use_chroma: bool = False
     chroma_dir: str = "server/chroma_db"

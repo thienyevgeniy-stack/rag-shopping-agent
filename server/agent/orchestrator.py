@@ -7,6 +7,7 @@ from server.agent.intent import detect_intent
 from server.agent.query_rewriter import rewrite_query
 from server.config import get_settings
 from server.inputs.processors import TextProcessor
+from server.llm.ark_client import ArkChatClient, LLMClient
 from server.rag.post_process import SearchFilters
 from server.rag.vector_store import ChromaStore, LocalJsonVectorStore, load_product_documents
 from server.session.state import FilterCondition, SessionStore
@@ -15,9 +16,15 @@ from server.tools.registry import ToolRegistry
 
 
 class Orchestrator:
-    def __init__(self, registry: ToolRegistry, sessions: SessionStore) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        sessions: SessionStore,
+        llm_client: LLMClient | None = None,
+    ) -> None:
         self.registry = registry
         self.sessions = sessions
+        self.llm_client = llm_client
         self.input_processor = TextProcessor()
 
     async def stream_chat(
@@ -37,13 +44,32 @@ class Orchestrator:
         filters = SearchFilters.from_session(session)
         cards = self.registry.execute("search_products", query=query, filters=filters)
 
-        answer = build_grounded_answer(processed.text, cards, intent.value)
-        session.add_assistant_message(answer)
         session.candidate_products = [card["id"] for card in cards]
 
-        for char in answer:
-            yield {"event": "token", "data": {"text": char}}
-            await asyncio.sleep(0.01)
+        tokens: list[str] = []
+        if self.llm_client is not None and cards:
+            try:
+                async for token in self.llm_client.stream_answer(processed.text, cards, intent.value):
+                    tokens.append(token)
+                    yield {"event": "token", "data": {"text": token}}
+            except Exception:
+                if not tokens:
+                    answer = build_grounded_answer(processed.text, cards, intent.value)
+                    async for item in stream_text(answer):
+                        yield item
+                    tokens.append(answer)
+            if not tokens:
+                answer = build_grounded_answer(processed.text, cards, intent.value)
+                async for item in stream_text(answer):
+                    yield item
+                tokens.append(answer)
+        else:
+            answer = build_grounded_answer(processed.text, cards, intent.value)
+            async for item in stream_text(answer):
+                yield item
+            tokens.append(answer)
+
+        session.add_assistant_message("".join(tokens))
 
         for card in cards:
             yield {"event": "product_card", "data": card}
@@ -56,6 +82,12 @@ class Orchestrator:
                 "exclusions": [item.model_dump() for item in session.exclusions],
             },
         }
+
+
+async def stream_text(text: str) -> AsyncIterator[dict]:
+    for char in text:
+        yield {"event": "token", "data": {"text": char}}
+        await asyncio.sleep(0.01)
 
 
 def extract_filters(message: str) -> list[FilterCondition]:
@@ -119,9 +151,10 @@ def build_grounded_answer(message: str, cards: list[dict], intent: str) -> str:
 def get_orchestrator() -> Orchestrator:
     settings = get_settings()
     store = create_store(settings)
+    llm_client = create_llm_client(settings)
     registry = ToolRegistry()
     registry.register(ProductSearchTool(store))
-    return Orchestrator(registry=registry, sessions=SessionStore())
+    return Orchestrator(registry=registry, sessions=SessionStore(), llm_client=llm_client)
 
 
 def create_store(settings):
@@ -134,3 +167,17 @@ def create_store(settings):
         except RuntimeError as exc:
             print(f"Chroma unavailable, falling back to local JSON search: {exc}")
     return LocalJsonVectorStore(settings.product_data_file)
+
+
+def create_llm_client(settings) -> LLMClient | None:
+    if not settings.use_llm:
+        return None
+    if not settings.ark_api_key:
+        print("USE_LLM=true but ARK_API_KEY is empty; falling back to template answers.")
+        return None
+    return ArkChatClient(
+        api_key=settings.ark_api_key,
+        base_url=settings.ark_base_url,
+        model=settings.ark_model,
+        timeout_seconds=settings.llm_timeout_seconds,
+    )
