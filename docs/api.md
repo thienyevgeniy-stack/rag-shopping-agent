@@ -60,3 +60,15 @@ GET /assets/products/p_beauty_021_live.jpg
 ```powershell
 D:\Android\Sdk\platform-tools\adb.exe reverse tcp:8000 tcp:8000
 ```
+
+## 商品详情页
+
+### `GET /products/{product_id}`
+
+返回本地商品详情 HTML 页面，例如：
+
+```text
+GET /products/p_beauty_021
+```
+
+商品卡片中的 `detail_url` 会指向该页面。当前页面展示商品主图、名称、品牌、类目、价格、库存、标签、规格和商品说明。

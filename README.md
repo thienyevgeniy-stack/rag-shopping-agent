@@ -9,7 +9,8 @@
 - 后端支持本地 JSON 商品检索 fallback，也可通过 `USE_CHROMA=true` 启用 Chroma
 - 后端可通过 `USE_LLM=true` 接入 Doubao/Ark 生成回答，失败时自动回退模板回答
 - 后端通过 `/assets/products/...` 提供商品主图静态资源
-- Android 端已实现 Compose 对话页、SSE 客户端、商品主图卡片和详情弹窗
+- 后端通过 `/products/{id}` 提供本地商品详情页
+- Android 端已实现 Compose 对话页、SSE 客户端、商品主图卡片、详情弹窗和落地页跳转
 - 真实 API Key 通过 `.env` 管理，不进入 Git
 
 ## 目录结构

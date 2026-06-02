@@ -17,6 +17,7 @@ Android Compose
   -> Doubao/Ark LLM 或模板 fallback
   -> SSE token/product_card/done
   -> /assets/products 商品主图
+  -> /products/{id} 商品详情页
 ```
 
 ## 后端扩展点
@@ -27,6 +28,7 @@ Android Compose
 - `PostProcessor`：当前有 `RangeFilter`、`ExclusionFilter`，后续增加 `ComparisonAggregator`
 - `LLMClient`：当前支持 Ark OpenAI-compatible `/chat/completions` 流式接口；`USE_LLM=true` 且 `ARK_API_KEY` 存在时启用。
 - `StaticFiles`：当前通过 `/assets/products/{filename}` 服务参考集商品主图。
+- `Products API`：当前通过 `/products/{product_id}` 提供本地商品详情 HTML 页。
 - SSE 事件：当前支持 `token`、`product_card`、`done`，后续增加 `cart_update`、`comparison_card`
 
 ## Chroma 接入
@@ -63,3 +65,11 @@ http://127.0.0.1:8000/assets/products/p_beauty_021_live.jpg
 ```
 
 真机调试时该 URL 通过 `adb reverse tcp:8000 tcp:8000` 被手机访问。Android 端使用 Coil 加载商品图片，点击商品卡片时打开本地详情弹窗。
+
+商品卡片中的 `detail_url` 指向本地商品详情页：
+
+```text
+http://127.0.0.1:8000/products/p_beauty_021
+```
+
+Android 详情弹窗中的“打开链接”会跳转到该页面，用于满足 Demo 中可点击商品落地页的基础要求。

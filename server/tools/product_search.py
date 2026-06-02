@@ -1,5 +1,5 @@
 from pathlib import PurePosixPath
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from server.rag.post_process import ExclusionFilter, KeywordFilter, RangeFilter, SearchFilters
 from server.rag.vector_store import VectorStore
@@ -30,7 +30,11 @@ def to_product_card(hit: dict, query: str, public_base_url: str = "") -> dict:
         "brand": metadata["brand"],
         "price": metadata["price"],
         "image_url": build_product_image_url(metadata.get("image_url", ""), public_base_url),
-        "detail_url": metadata.get("detail_url", ""),
+        "detail_url": build_product_detail_url(
+            product_id=metadata["id"],
+            raw_detail_url=metadata.get("detail_url", ""),
+            public_base_url=public_base_url,
+        ),
         "reason": reason,
         "score": hit.get("score", 0),
     }
@@ -51,6 +55,17 @@ def build_product_image_url(raw_image_url: str, public_base_url: str = "") -> st
         return ""
 
     path = f"/assets/products/{quote(filename)}"
+    if not public_base_url:
+        return path
+    return f"{public_base_url.rstrip('/')}{path}"
+
+
+def build_product_detail_url(product_id: str, raw_detail_url: str = "", public_base_url: str = "") -> str:
+    raw_detail_url = str(raw_detail_url).strip()
+    if raw_detail_url and urlparse(raw_detail_url).scheme in {"http", "https"}:
+        return raw_detail_url
+
+    path = f"/products/{quote(str(product_id))}"
     if not public_base_url:
         return path
     return f"{public_base_url.rstrip('/')}{path}"

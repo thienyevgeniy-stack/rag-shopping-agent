@@ -34,6 +34,21 @@ def test_product_image_asset_is_served() -> None:
     assert response.content.startswith(b"\xff\xd8")
 
 
+def test_product_detail_page_is_served() -> None:
+    response = client.get("/products/p_beauty_021")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "科颜氏牛油果保湿眼霜" in response.text
+    assert "/assets/products/p_beauty_021_live.jpg" in response.text
+
+
+def test_product_detail_page_returns_404_for_missing_product() -> None:
+    response = client.get("/products/missing-product")
+
+    assert response.status_code == 404
+
+
 def test_chat_stream_returns_tokens_and_product_card() -> None:
     response = client.post(
         "/chat",
@@ -48,6 +63,7 @@ def test_chat_stream_returns_tokens_and_product_card() -> None:
     assert "event: product_card" in response.text
     assert "科颜氏牛油果保湿眼霜" in response.text
     assert "http://127.0.0.1:8000/assets/products/p_beauty_021_live.jpg" in response.text
+    assert "http://127.0.0.1:8000/products/p_beauty_021" in response.text
     assert "event: done" in response.text
 
 

@@ -22,6 +22,7 @@
 - [x] Android 商品卡片展示和点击跳转
 - [x] Android 商品卡片主图展示
 - [x] Android 商品详情弹窗
+- [x] 本地商品详情页 `/products/{product_id}`
 - [x] 后端 pytest 测试
 - [x] 后端联调测试脚本
 - [x] Android 环境检查脚本
@@ -43,6 +44,7 @@
 - [x] 防幻觉 prompt：约束只基于候选商品回答，不编造价格、优惠、库存或功效
 - [x] 从参考集 zip 抽取 100 张商品主图到 `data/product_images`
 - [x] FastAPI 通过 `/assets/products/...` 提供商品主图静态资源
+- [x] 商品卡片返回完整 `detail_url`，支持跳转本地商品详情页
 
 ## 已验证
 
@@ -58,6 +60,7 @@
 - [x] LLM mock 测试：正常流式生成、失败回退、无商品时跳过 LLM
 - [x] Doubao-Seed 真实接口联调完成：`doubao-seed-2-0-lite-260215`
 - [x] 静态图片接口验证：`/assets/products/p_beauty_021_live.jpg`
+- [x] 商品详情页接口验证：`/products/p_beauty_021`
 - [x] Android Debug 构建和真机安装成功
 
 ## 当前状态
@@ -81,12 +84,12 @@ Android 真机 App
 - [ ] 还未接入 Doubao embedding
 - [ ] 多轮对话目前是结构预留，尚未做完整查询改写
 - [ ] 购物车、多模态、商品对比仍是接口预留
-- [ ] `detail_url` 仍为空，当前通过 App 内详情弹窗展示商品信息
+- [ ] 商品详情页仍是本地模拟页，尚未接真实电商落地页
 
 ## 下一步
 
 1. 接入 Doubao embedding，把本地 hashing embedding 替换为真实语义向量。
 2. 完善多轮查询改写与主动澄清。
-3. 给商品补齐本地详情页或模拟落地页 URL。
-4. 从购物车、多模态、商品对比中选择 1-2 个加分项深入实现。
-5. 做 Demo 脚本和答辩截图/录屏材料。
+3. 从购物车、多模态、商品对比中选择 1-2 个加分项深入实现。
+4. 做 Demo 脚本和答辩截图/录屏材料。
+5. 后续如有真实商品落地页，再替换当前本地模拟页 URL。
