@@ -79,3 +79,18 @@ def test_chat_empty_result_degrades_without_product_card() -> None:
     assert response.status_code == 200
     assert "没有找到足够匹配的商品" in collect_token_text(response.text)
     assert "event: product_card" not in response.text
+
+
+def test_chat_compare_returns_comparison_card() -> None:
+    response = client.post(
+        "/chat",
+        json={
+            "session_id": "pytest-compare",
+            "message": "科颜氏和AHC哪个眼霜更适合干皮",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "event: comparison_card" in response.text
+    assert "event: product_card" in response.text
+    assert "我先基于当前商品库做对比" in collect_token_text(response.text)

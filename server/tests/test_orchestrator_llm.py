@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 
 from server.agent.orchestrator import Orchestrator
 from server.session.state import SessionStore
+from server.tools.product_compare import ProductCompareTool
 from server.tools.registry import ToolRegistry
 
 
@@ -52,7 +53,9 @@ class FakeLLMClient:
 
 def make_orchestrator(cards: list[dict], llm_client: FakeLLMClient | None) -> Orchestrator:
     registry = ToolRegistry()
-    registry.register(FixedSearchTool(cards))
+    search_tool = FixedSearchTool(cards)
+    registry.register(search_tool)
+    registry.register(ProductCompareTool(search_tool))
     return Orchestrator(registry=registry, sessions=SessionStore(), llm_client=llm_client)
 
 
@@ -109,3 +112,23 @@ def test_orchestrator_asks_clarification_for_vague_phone_request() -> None:
     done = [item for item in events if item["event"] == "done"][-1]
     assert done["data"]["needs_clarification"] is True
     assert done["data"]["pending_subject"] == "手机"
+
+
+def test_orchestrator_emits_comparison_card_for_compare_intent() -> None:
+    other_card = {
+        **PRODUCT_CARD,
+        "id": "p_beauty_016",
+        "name": "AHC塑颜修护全脸眼霜",
+        "brand": "AHC",
+        "price": 139.0,
+        "reason": "匹配眼霜需求",
+    }
+    llm = FakeLLMClient(tokens=["不应调用"])
+    orchestrator = make_orchestrator(cards=[PRODUCT_CARD, other_card], llm_client=llm)
+
+    events = collect_events(orchestrator, "科颜氏和AHC哪个眼霜更适合干皮")
+
+    assert "我先基于当前商品库做对比" in token_text(events)
+    assert any(item["event"] == "comparison_card" for item in events)
+    assert sum(1 for item in events if item["event"] == "product_card") == 2
+    assert llm.calls == []

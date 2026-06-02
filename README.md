@@ -10,6 +10,7 @@
 - 后端可通过 `USE_LLM=true` 接入 Doubao/Ark 生成回答，失败时自动回退模板回答
 - Chroma 默认使用本地 hashing embedding；可通过 `USE_ARK_EMBEDDING=true` 切换到 Ark/Doubao embedding
 - 后端支持主动澄清：宽泛需求会先追问预算/偏好，再进入检索
+- 后端支持商品对比：识别品牌/商品对，返回对比回答、商品卡片和 `comparison_card`
 - 后端通过 `/assets/products/...` 提供商品主图静态资源
 - 后端通过 `/products/{id}` 提供本地商品详情页
 - Android 端已实现 Compose 对话页、SSE 客户端、商品主图卡片、详情弹窗和落地页跳转
@@ -116,8 +117,8 @@ Invoke-WebRequest `
 
 1. 已跑通最小闭环：Android 输入 → FastAPI → 检索 → Doubao/模板生成 → SSE 回复 → 商品主图卡片 → 商品详情页
 2. 已接入 Chroma 持久化链路、Ark/Doubao embedding 适配和 Doubao/Ark 回答生成
-3. 已实现基础主动澄清和澄清主题补全；下一步继续做深多轮查询改写
-4. 从购物车、多模态、商品对比中选择 1-2 个加分项深入实现
+3. 已实现基础主动澄清、澄清主题补全和商品对比
+4. 下一步从购物车、多模态、端侧对比卡渲染中选择 1-2 个加分项深入实现
 
 详细设计见 [docs/architecture.md](docs/architecture.md)、[docs/api.md](docs/api.md) 和 [docs/progress.md](docs/progress.md)。
 

@@ -43,9 +43,24 @@ data: {"session_id":"demo","filters":[],"exclusions":[],"needs_clarification":fa
 | `product_card` | 商品卡片 |
 | `done` | 本轮结束 |
 | `cart_update` | 预留：购物车状态变化 |
-| `comparison_card` | 预留：多商品对比 |
+| `comparison_card` | 多商品对比结构化结果 |
 
 `done` 事件中的 `needs_clarification=true` 表示本轮是主动澄清，不会返回商品卡片；`pending_subject` 会保留待补全的商品主题，例如“手机”。
+
+对比请求会额外返回 `comparison_card`，例如：
+
+```text
+event: comparison_card
+data: {
+  "title": "商品对比",
+  "query": "科颜氏和AHC哪个眼霜更适合干皮",
+  "products": [
+    {"id":"p_beauty_021","brand":"科颜氏","price":210,"strengths":["保湿"]},
+    {"id":"p_beauty_016","brand":"AHC","price":139,"strengths":["保湿","修护"]}
+  ],
+  "recommendation": {"product_id":"p_beauty_021","focus":"保湿/干皮"}
+}
+```
 
 ## 静态资源
 

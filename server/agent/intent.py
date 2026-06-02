@@ -10,7 +10,7 @@ class UserIntent(StrEnum):
 
 def detect_intent(message: str) -> UserIntent:
     text = message.lower()
-    if any(word in text for word in ["对比", "比较", "哪个更", "区别"]):
+    if any(word in text for word in ["对比", "比较", "哪个更", "哪个", "哪款", "谁更", "区别"]):
         return UserIntent.COMPARE
     if any(word in text for word in ["加到购物车", "下单", "购买", "结算"]):
         return UserIntent.CART

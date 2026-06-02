@@ -3,7 +3,7 @@ import re
 from collections.abc import AsyncIterator
 from functools import lru_cache
 
-from server.agent.intent import detect_intent
+from server.agent.intent import UserIntent, detect_intent
 from server.agent.query_rewriter import rewrite_query
 from server.config import get_settings
 from server.inputs.processors import TextProcessor
@@ -16,6 +16,7 @@ from server.rag.vector_store import (
     load_product_documents,
 )
 from server.session.state import FilterCondition, SessionStore
+from server.tools.product_compare import ProductCompareTool, build_comparison_answer
 from server.tools.product_search import ProductSearchTool
 from server.tools.registry import ToolRegistry
 
@@ -52,18 +53,31 @@ class Orchestrator:
             session.add_assistant_message(clarification)
             yield {
                 "event": "done",
-                "data": {
-                    "session_id": session_id,
-                    "filters": [item.model_dump() for item in session.filters],
-                    "exclusions": [item.model_dump() for item in session.exclusions],
-                    "needs_clarification": True,
-                    "pending_subject": session.pending_subject,
-                },
+                "data": build_done_payload(session_id, session, needs_clarification=True),
             }
             return
 
         query = rewrite_query(processed.text, session)
         filters = SearchFilters.from_session(session)
+
+        if intent == UserIntent.COMPARE:
+            result = self.registry.execute("compare_products", query=query, filters=filters)
+            cards = result["cards"]
+            comparison = result["comparison"]
+            session.candidate_products = [card["id"] for card in cards]
+            answer = build_comparison_answer(comparison)
+            async for item in stream_text(answer):
+                yield item
+            session.add_assistant_message(answer)
+            for card in cards:
+                yield {"event": "product_card", "data": card}
+            yield {"event": "comparison_card", "data": comparison}
+            yield {
+                "event": "done",
+                "data": build_done_payload(session_id, session, needs_clarification=False),
+            }
+            return
+
         cards = self.registry.execute("search_products", query=query, filters=filters)
 
         session.candidate_products = [card["id"] for card in cards]
@@ -98,13 +112,7 @@ class Orchestrator:
 
         yield {
             "event": "done",
-            "data": {
-                "session_id": session_id,
-                "filters": [item.model_dump() for item in session.filters],
-                "exclusions": [item.model_dump() for item in session.exclusions],
-                "needs_clarification": False,
-                "pending_subject": session.pending_subject,
-            },
+            "data": build_done_payload(session_id, session, needs_clarification=False),
         }
 
 
@@ -112,6 +120,16 @@ async def stream_text(text: str) -> AsyncIterator[dict]:
     for char in text:
         yield {"event": "token", "data": {"text": char}}
         await asyncio.sleep(0.01)
+
+
+def build_done_payload(session_id: str, session, needs_clarification: bool) -> dict:
+    return {
+        "session_id": session_id,
+        "filters": [item.model_dump() for item in session.filters],
+        "exclusions": [item.model_dump() for item in session.exclusions],
+        "needs_clarification": needs_clarification,
+        "pending_subject": session.pending_subject,
+    }
 
 
 def extract_filters(message: str) -> list[FilterCondition]:
@@ -233,7 +251,9 @@ def get_orchestrator() -> Orchestrator:
     store = create_store(settings)
     llm_client = create_llm_client(settings)
     registry = ToolRegistry()
-    registry.register(ProductSearchTool(store, public_base_url=settings.public_base_url))
+    search_tool = ProductSearchTool(store, public_base_url=settings.public_base_url)
+    registry.register(search_tool)
+    registry.register(ProductCompareTool(search_tool))
     return Orchestrator(registry=registry, sessions=SessionStore(), llm_client=llm_client)
 
 

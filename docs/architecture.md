@@ -23,13 +23,13 @@ Android Compose
 ## 后端扩展点
 
 - `VectorStore`：当前支持 `LocalJsonVectorStore` 和 `ChromaStore`。未安装 Chroma 或未启用时使用 JSON fallback；设置 `USE_CHROMA=true` 后走 Chroma。
-- `ToolRegistry`：当前注册 `search_products`，后续增加 `add_to_cart`、`checkout`
+- `ToolRegistry`：当前注册 `search_products` 和 `compare_products`，后续增加 `add_to_cart`、`checkout`
 - `InputProcessor`：当前是 `TextProcessor`，后续增加 `ASRProcessor`、`VLMProcessor`
-- `PostProcessor`：当前有 `RangeFilter`、`ExclusionFilter`，后续增加 `ComparisonAggregator`
+- `PostProcessor`：当前有 `RangeFilter`、`KeywordFilter`、`ExclusionFilter`
 - `LLMClient`：当前支持 Ark OpenAI-compatible `/chat/completions` 流式接口；`USE_LLM=true` 且 `ARK_API_KEY` 存在时启用。
 - `StaticFiles`：当前通过 `/assets/products/{filename}` 服务参考集商品主图。
 - `Products API`：当前通过 `/products/{product_id}` 提供本地商品详情 HTML 页。
-- SSE 事件：当前支持 `token`、`product_card`、`done`，后续增加 `cart_update`、`comparison_card`
+- SSE 事件：当前支持 `token`、`product_card`、`comparison_card`、`done`，后续增加 `cart_update`
 
 ## Chroma 接入
 
@@ -67,6 +67,16 @@ python -m server.rag.ingest
 ```
 
 澄清时 `done` 事件会带上 `needs_clarification=true` 和 `pending_subject`。用户下一轮回答“拍照优先，预算4000”时，`rewrite_query` 会把上一轮的“手机”补回查询，形成更完整的检索表达。
+
+## 商品对比
+
+`compare_products` 复用 `ProductSearchTool`，但会先解析“X 和 Y / X vs Y / X 与 Y”这类品牌或商品对，再分别检索两侧候选，避免普通 Top-K 只召回一侧品牌。对比场景会保留双方候选用于解释差异；如果用户给出预算，结论会优先推荐预算内商品，同时在 tradeoffs 中标记超预算候选。
+
+对比链路返回三类 SSE：
+
+- `token`：确定性对比回答，关闭 LLM 时也可稳定演示。
+- `product_card`：两侧候选商品卡片。
+- `comparison_card`：结构化对比数据，便于后续 Android 端做专门 UI。
 
 ## Doubao/Ark 生成接入
 
