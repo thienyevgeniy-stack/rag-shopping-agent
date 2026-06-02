@@ -98,12 +98,12 @@ Invoke-WebRequest `
   -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 ```
 
-## 开发优先级
+## 当前开发重点
 
-1. 跑通最小闭环：Android 输入 → FastAPI → 检索 → SSE 回复 → 商品卡片
-2. 接入真实 embedding / Chroma / Doubao 生成
-3. 做深多轮上下文与反选排除
-4. 预留购物车、多模态、对比决策接口
+1. 已跑通最小闭环：Android 输入 → FastAPI → 检索 → Doubao/模板生成 → SSE 回复 → 商品主图卡片 → 商品详情页
+2. 已接入 Chroma 持久化链路和 Doubao/Ark 回答生成；下一步把本地 hashing embedding 替换为真实 Doubao embedding
+3. 继续做深多轮上下文、查询改写、主动澄清与反选排除
+4. 从购物车、多模态、商品对比中选择 1-2 个加分项深入实现
 
 详细设计见 [docs/architecture.md](docs/architecture.md)、[docs/api.md](docs/api.md) 和 [docs/progress.md](docs/progress.md)。
 

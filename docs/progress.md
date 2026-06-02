@@ -36,7 +36,7 @@
 - [x] ChromaStore 适配层
 - [x] Chroma 灌库脚本 `python -m server.rag.ingest`
 - [x] `USE_CHROMA=true` 可启用 Chroma，默认保留 JSON fallback
-- [x] 已完成 Git 提交：`6dbb121`、`92751b5`
+- [x] 已完成 Git 提交，当前最新提交覆盖：MVP、Chroma、反选约束、Doubao/Ark、商品主图、商品详情页
 - [x] 严格关键词过滤：无严格匹配时降级说明，不返回无关商品
 - [x] 一句话多重反选解析：如“不要含酒精的，也不要日系品牌”
 - [x] Doubao/Ark LLM 客户端接入：`USE_LLM=true` 时基于 RAG 商品上下文生成回答

@@ -29,7 +29,7 @@ event: token
 data: {"text":"根"}
 
 event: product_card
-data: {"id":"p001","name":"清爽控油氨基酸洗面奶","price":79,"image_url":"http://127.0.0.1:8000/assets/products/p001_live.jpg"}
+data: {"id":"p001","name":"清爽控油氨基酸洗面奶","price":79,"image_url":"http://127.0.0.1:8000/assets/products/p001_live.jpg","detail_url":"http://127.0.0.1:8000/products/p001"}
 
 event: done
 data: {"session_id":"demo","filters":[],"exclusions":[]}
