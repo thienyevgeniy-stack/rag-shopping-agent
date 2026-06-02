@@ -17,9 +17,14 @@ class Settings(BaseSettings):
     ark_model: str = "ep-20260514111645-lmgt2"
     use_llm: bool = False
     llm_timeout_seconds: float = 45.0
+    use_ark_embedding: bool = False
+    ark_embedding_model: str = "doubao-embedding-text-240515"
+    embedding_timeout_seconds: float = 60.0
+    embedding_batch_size: int = 4
 
     use_chroma: bool = False
     chroma_dir: str = "server/chroma_db"
+    chroma_collection_name: str = "products"
     product_data_path: str = "data/products_ref.json"
     product_image_dir: str = "data/product_images"
     public_base_url: str = "http://127.0.0.1:8000"

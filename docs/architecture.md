@@ -33,7 +33,19 @@ Android Compose
 
 ## Chroma 接入
 
-`server.rag.ingest` 会读取 `data/products_ref.json`，把统一商品文档写入 `server/chroma_db`。当前 embedding 使用本地 hashing embedding，用来先跑通向量库持久化链路；后续接 Doubao embedding 时只需要替换 `HashingEmbeddingFunction`。
+`server.rag.ingest` 会读取 `data/products_ref.json`，把统一商品文档写入 `server/chroma_db`。默认 embedding 使用本地 hashing embedding，便于离线测试和无 API Key 启动。
+
+如果 `.env` 或环境变量设置 `USE_ARK_EMBEDDING=true` 且存在 `ARK_API_KEY`，Chroma 会使用 `ArkEmbeddingFunction` 调用 Ark OpenAI-compatible `/embeddings` 接口。默认 `EMBEDDING_BATCH_SIZE=4`，贴近方舟文本向量化文档的性能建议。为避免旧 hashing 向量和真实 embedding 维度冲突，真实 embedding 会写入带模型名后缀的独立 collection，例如：
+
+```text
+products_ark_embedding_doubao_embedding_text_240515
+```
+
+切换 embedding 后需要重新执行：
+
+```powershell
+python -m server.rag.ingest
+```
 
 ## 防幻觉策略
 
@@ -44,6 +56,17 @@ Android Compose
 - 价格、品牌、落地页来自 metadata，不由模型自由生成
 
 接入大模型后，系统提示词仍要求只能依据检索上下文回答。
+
+## 主动澄清与多轮改写
+
+对于过宽泛且缺少预算/偏好的请求，Orchestrator 会先返回澄清问题，而不是直接检索并硬推商品。例如：
+
+```text
+用户：推荐一款手机
+助手：你更看重拍照、续航、性能还是性价比？预算大概是多少？
+```
+
+澄清时 `done` 事件会带上 `needs_clarification=true` 和 `pending_subject`。用户下一轮回答“拍照优先，预算4000”时，`rewrite_query` 会把上一轮的“手机”补回查询，形成更完整的检索表达。
 
 ## Doubao/Ark 生成接入
 

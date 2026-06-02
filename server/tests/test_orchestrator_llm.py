@@ -24,8 +24,10 @@ class FixedSearchTool:
 
     def __init__(self, cards: list[dict]) -> None:
         self.cards = cards
+        self.calls: list[dict] = []
 
     def run(self, **kwargs) -> list[dict]:
+        self.calls.append(kwargs)
         return self.cards
 
 
@@ -95,3 +97,15 @@ def test_orchestrator_skips_llm_when_no_cards() -> None:
 
     assert "没有找到足够匹配的商品" in token_text(events)
     assert llm.calls == []
+
+
+def test_orchestrator_asks_clarification_for_vague_phone_request() -> None:
+    orchestrator = make_orchestrator(cards=[PRODUCT_CARD], llm_client=None)
+
+    events = collect_events(orchestrator, "推荐一款手机")
+
+    assert "你更看重拍照、续航、性能还是性价比" in token_text(events)
+    assert not any(item["event"] == "product_card" for item in events)
+    done = [item for item in events if item["event"] == "done"][-1]
+    assert done["data"]["needs_clarification"] is True
+    assert done["data"]["pending_subject"] == "手机"

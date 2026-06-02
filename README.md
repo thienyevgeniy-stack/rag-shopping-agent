@@ -8,6 +8,8 @@
 - 后端提供 `/health` 和 `/chat` SSE 接口
 - 后端支持本地 JSON 商品检索 fallback，也可通过 `USE_CHROMA=true` 启用 Chroma
 - 后端可通过 `USE_LLM=true` 接入 Doubao/Ark 生成回答，失败时自动回退模板回答
+- Chroma 默认使用本地 hashing embedding；可通过 `USE_ARK_EMBEDDING=true` 切换到 Ark/Doubao embedding
+- 后端支持主动澄清：宽泛需求会先追问预算/偏好，再进入检索
 - 后端通过 `/assets/products/...` 提供商品主图静态资源
 - 后端通过 `/products/{id}` 提供本地商品详情页
 - Android 端已实现 Compose 对话页、SSE 客户端、商品主图卡片、详情弹窗和落地页跳转
@@ -66,6 +68,18 @@ $env:USE_CHROMA="true"
 .\scripts\run_server.ps1
 ```
 
+启用 Ark/Doubao embedding 后重新灌库：
+
+```powershell
+# 先在 .env 中填入 ARK_API_KEY，不要提交 .env
+$env:USE_CHROMA="true"
+$env:USE_ARK_EMBEDDING="true"
+$env:ARK_EMBEDDING_MODEL="doubao-embedding-text-240515"
+$env:EMBEDDING_BATCH_SIZE="4"
+python -m server.rag.ingest
+.\scripts\run_server.ps1
+```
+
 启用 Doubao/Ark 生成回答：
 
 ```powershell
@@ -101,8 +115,8 @@ Invoke-WebRequest `
 ## 当前开发重点
 
 1. 已跑通最小闭环：Android 输入 → FastAPI → 检索 → Doubao/模板生成 → SSE 回复 → 商品主图卡片 → 商品详情页
-2. 已接入 Chroma 持久化链路和 Doubao/Ark 回答生成；下一步把本地 hashing embedding 替换为真实 Doubao embedding
-3. 继续做深多轮上下文、查询改写、主动澄清与反选排除
+2. 已接入 Chroma 持久化链路、Ark/Doubao embedding 适配和 Doubao/Ark 回答生成
+3. 已实现基础主动澄清和澄清主题补全；下一步继续做深多轮查询改写
 4. 从购物车、多模态、商品对比中选择 1-2 个加分项深入实现
 
 详细设计见 [docs/architecture.md](docs/architecture.md)、[docs/api.md](docs/api.md) 和 [docs/progress.md](docs/progress.md)。

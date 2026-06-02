@@ -32,7 +32,7 @@ event: product_card
 data: {"id":"p001","name":"清爽控油氨基酸洗面奶","price":79,"image_url":"http://127.0.0.1:8000/assets/products/p001_live.jpg","detail_url":"http://127.0.0.1:8000/products/p001"}
 
 event: done
-data: {"session_id":"demo","filters":[],"exclusions":[]}
+data: {"session_id":"demo","filters":[],"exclusions":[],"needs_clarification":false,"pending_subject":""}
 ```
 
 ## 事件类型
@@ -44,6 +44,8 @@ data: {"session_id":"demo","filters":[],"exclusions":[]}
 | `done` | 本轮结束 |
 | `cart_update` | 预留：购物车状态变化 |
 | `comparison_card` | 预留：多商品对比 |
+
+`done` 事件中的 `needs_clarification=true` 表示本轮是主动澄清，不会返回商品卡片；`pending_subject` 会保留待补全的商品主题，例如“手机”。
 
 ## 静态资源
 

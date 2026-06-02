@@ -9,7 +9,12 @@ from server.config import get_settings
 from server.inputs.processors import TextProcessor
 from server.llm.ark_client import ArkChatClient, LLMClient
 from server.rag.post_process import SearchFilters
-from server.rag.vector_store import ChromaStore, LocalJsonVectorStore, load_product_documents
+from server.rag.vector_store import (
+    ChromaStore,
+    LocalJsonVectorStore,
+    build_chroma_embedding_function,
+    load_product_documents,
+)
 from server.session.state import FilterCondition, SessionStore
 from server.tools.product_search import ProductSearchTool
 from server.tools.registry import ToolRegistry
@@ -40,6 +45,23 @@ class Orchestrator:
         session.merge_filters(extracted)
 
         intent = detect_intent(processed.text)
+        clarification = build_clarification_question(processed.text, session)
+        if clarification:
+            async for item in stream_text(clarification):
+                yield item
+            session.add_assistant_message(clarification)
+            yield {
+                "event": "done",
+                "data": {
+                    "session_id": session_id,
+                    "filters": [item.model_dump() for item in session.filters],
+                    "exclusions": [item.model_dump() for item in session.exclusions],
+                    "needs_clarification": True,
+                    "pending_subject": session.pending_subject,
+                },
+            }
+            return
+
         query = rewrite_query(processed.text, session)
         filters = SearchFilters.from_session(session)
         cards = self.registry.execute("search_products", query=query, filters=filters)
@@ -80,6 +102,8 @@ class Orchestrator:
                 "session_id": session_id,
                 "filters": [item.model_dump() for item in session.filters],
                 "exclusions": [item.model_dump() for item in session.exclusions],
+                "needs_clarification": False,
+                "pending_subject": session.pending_subject,
             },
         }
 
@@ -93,9 +117,17 @@ async def stream_text(text: str) -> AsyncIterator[dict]:
 def extract_filters(message: str) -> list[FilterCondition]:
     filters: list[FilterCondition] = []
 
-    max_price = re.search(r"(\d+)\s*(元|块)?\s*(以内|以下|之内)", message)
-    if max_price:
-        filters.append(FilterCondition(kind="max_price", value=max_price.group(1)))
+    max_price_values: list[str] = []
+    for pattern in [
+        r"预算\s*(?:是|为|大概|约|在)?\s*(\d+)\s*(元|块)?",
+        r"(\d+)\s*(元|块)?\s*(以内|以下|之内)",
+    ]:
+        for match in re.finditer(pattern, message):
+            value = match.group(1)
+            if value not in max_price_values:
+                max_price_values.append(value)
+    for value in max_price_values:
+        filters.append(FilterCondition(kind="max_price", value=value))
 
     if any(word in message for word in ["轻量", "轻便", "轻一点"]):
         filters.append(FilterCondition(kind="keyword", value="轻量"))
@@ -106,7 +138,22 @@ def extract_filters(message: str) -> list[FilterCondition]:
     if any(word in message for word in ["敏感肌", "低刺激"]):
         filters.append(FilterCondition(kind="keyword", value="敏感肌"))
 
-    for keyword in ["眼霜", "卸妆油", "跑鞋", "咖啡", "蓝牙耳机", "耳机", "防晒", "面霜"]:
+    for keyword in [
+        "眼霜",
+        "卸妆油",
+        "跑鞋",
+        "咖啡",
+        "蓝牙耳机",
+        "耳机",
+        "防晒",
+        "防晒霜",
+        "面霜",
+        "手机",
+        "拍照",
+        "续航",
+        "性能",
+        "性价比",
+    ]:
         if keyword in message:
             filters.append(FilterCondition(kind="keyword", value=keyword))
 
@@ -117,6 +164,39 @@ def extract_filters(message: str) -> list[FilterCondition]:
             filters.append(FilterCondition(kind="exclude", value=value))
 
     return filters
+
+
+def build_clarification_question(message: str, session) -> str:
+    subject = detect_clarification_subject(message)
+    if not subject:
+        return ""
+
+    actionable_filters = [
+        item
+        for item in session.filters
+        if not (item.kind == "keyword" and item.value == subject)
+    ]
+    has_actionable_detail = bool(actionable_filters or session.exclusions)
+    if has_actionable_detail:
+        return ""
+
+    session.pending_subject = subject
+    if subject == "手机":
+        return "可以。我先确认一下：你更看重拍照、续航、性能还是性价比？预算大概是多少？"
+    return f"可以。我先确认一下：你对{subject}更看重什么场景、预算和品牌偏好吗？"
+
+
+def detect_clarification_subject(message: str) -> str:
+    normalized = message.strip()
+    if "手机" not in normalized:
+        return ""
+    has_budget = re.search(r"\d+\s*(元|块|以内|以下|左右|预算)", normalized)
+    preference_words = ["拍照", "续航", "性能", "性价比", "轻薄", "游戏", "老人", "学生"]
+    if has_budget or any(word in normalized for word in preference_words):
+        return ""
+    if any(word in normalized for word in ["推荐", "买", "想要", "需要"]):
+        return "手机"
+    return ""
 
 
 def normalize_exclusion(value: str) -> str:
@@ -160,7 +240,22 @@ def get_orchestrator() -> Orchestrator:
 def create_store(settings):
     if settings.use_chroma:
         try:
-            store = ChromaStore(settings.chroma_path)
+            embedding_function, collection_name = build_chroma_embedding_function(
+                use_ark_embedding=settings.use_ark_embedding,
+                api_key=settings.ark_api_key,
+                base_url=settings.ark_base_url,
+                model=settings.ark_embedding_model,
+                timeout_seconds=settings.embedding_timeout_seconds,
+                batch_size=settings.embedding_batch_size,
+                collection_name=settings.chroma_collection_name,
+            )
+            if settings.use_ark_embedding and not settings.ark_api_key:
+                print("USE_ARK_EMBEDDING=true but ARK_API_KEY is empty; using local hashing embedding.")
+            store = ChromaStore(
+                settings.chroma_path,
+                collection_name=collection_name,
+                embedding_function=embedding_function,
+            )
             if store.count() == 0:
                 store.add(load_product_documents(settings.product_data_file))
             return store

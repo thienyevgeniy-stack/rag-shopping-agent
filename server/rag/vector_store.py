@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+import httpx
+
 
 @dataclass(frozen=True)
 class VectorDocument:
@@ -50,7 +52,12 @@ class LocalJsonVectorStore:
 
 
 class ChromaStore:
-    def __init__(self, persist_path: Path, collection_name: str = "products") -> None:
+    def __init__(
+        self,
+        persist_path: Path,
+        collection_name: str = "products",
+        embedding_function: Any | None = None,
+    ) -> None:
         try:
             import chromadb
             from chromadb.config import Settings
@@ -67,7 +74,7 @@ class ChromaStore:
         )
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
-            embedding_function=HashingEmbeddingFunction(),
+            embedding_function=embedding_function or HashingEmbeddingFunction(),
         )
 
     def add(self, documents: list[VectorDocument]) -> None:
@@ -119,7 +126,7 @@ class ChromaStore:
 
 
 class HashingEmbeddingFunction:
-    """Small local embedding hook for Chroma; swap this for Doubao embeddings later."""
+    """Small local embedding hook for Chroma when external embeddings are disabled."""
 
     def __init__(self, dimensions: int = 384) -> None:
         self.dimensions = dimensions
@@ -130,6 +137,108 @@ class HashingEmbeddingFunction:
     @staticmethod
     def name() -> str:
         return "local_hashing_embedding"
+
+
+class ArkEmbeddingFunction:
+    """Chroma embedding hook backed by Ark's OpenAI-compatible embeddings API."""
+
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+        timeout_seconds: float = 60.0,
+        batch_size: int = 64,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        if batch_size <= 0 or batch_size > 256:
+            raise ValueError("ARK embedding batch_size must be between 1 and 256.")
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+        self.batch_size = batch_size
+        self.transport = transport
+
+    def __call__(self, input: list[str]) -> list[list[float]]:
+        if not input:
+            return []
+        if not self.api_key:
+            raise RuntimeError("ARK_API_KEY is not configured for embedding.")
+
+        embeddings: list[list[float]] = []
+        timeout = httpx.Timeout(self.timeout_seconds)
+        with httpx.Client(timeout=timeout, transport=self.transport) as client:
+            for start in range(0, len(input), self.batch_size):
+                batch = input[start : start + self.batch_size]
+                embeddings.extend(self._embed_batch(client, batch))
+        return embeddings
+
+    def _embed_batch(self, client: httpx.Client, batch: list[str]) -> list[list[float]]:
+        url = f"{self.base_url}/embeddings"
+        payload = {
+            "model": self.model,
+            "input": [text if text.strip() else "<empty>" for text in batch],
+            "encoding_format": "float",
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        response = client.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        return parse_embedding_response(response.json(), expected_count=len(batch))
+
+    def name(self) -> str:
+        return f"ark_embedding_{safe_identifier(self.model)}"
+
+
+def parse_embedding_response(payload: dict[str, Any], expected_count: int) -> list[list[float]]:
+    data = payload.get("data")
+    if not isinstance(data, list):
+        raise RuntimeError("ARK embedding response is missing a data list.")
+
+    by_index: dict[int, list[float]] = {}
+    for fallback_index, item in enumerate(data):
+        if not isinstance(item, dict):
+            continue
+        index = int(item.get("index", fallback_index))
+        embedding = item.get("embedding")
+        if not isinstance(embedding, list) or not embedding:
+            raise RuntimeError("ARK embedding response contains an invalid embedding.")
+        by_index[index] = [float(value) for value in embedding]
+
+    missing = [index for index in range(expected_count) if index not in by_index]
+    if missing:
+        raise RuntimeError(f"ARK embedding response missing indexes: {missing}")
+
+    return [by_index[index] for index in range(expected_count)]
+
+
+def build_chroma_embedding_function(
+    *,
+    use_ark_embedding: bool,
+    api_key: str,
+    base_url: str,
+    model: str,
+    timeout_seconds: float,
+    batch_size: int,
+    collection_name: str,
+) -> tuple[Any, str]:
+    if use_ark_embedding and api_key:
+        embedder = ArkEmbeddingFunction(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            timeout_seconds=timeout_seconds,
+            batch_size=batch_size,
+        )
+        return embedder, f"{collection_name}_{safe_identifier(embedder.name())}"
+    return HashingEmbeddingFunction(), collection_name
+
+
+def safe_identifier(value: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9_]+", "_", value).strip("_").lower()
 
 
 def tokenize(text: str) -> set[str]:

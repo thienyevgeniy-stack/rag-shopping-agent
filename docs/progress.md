@@ -36,6 +36,8 @@
 - [x] ChromaStore 适配层
 - [x] Chroma 灌库脚本 `python -m server.rag.ingest`
 - [x] `USE_CHROMA=true` 可启用 Chroma，默认保留 JSON fallback
+- [x] Ark/Doubao embedding 适配：`USE_ARK_EMBEDDING=true` 时 Chroma 使用 Ark `/embeddings`
+- [x] embedding collection 隔离：真实 embedding 使用模型名后缀 collection，避免与本地 hashing 向量维度冲突
 - [x] 已完成 Git 提交，当前最新提交覆盖：MVP、Chroma、反选约束、Doubao/Ark、商品主图、商品详情页
 - [x] 严格关键词过滤：无严格匹配时降级说明，不返回无关商品
 - [x] 一句话多重反选解析：如“不要含酒精的，也不要日系品牌”
@@ -45,6 +47,9 @@
 - [x] 从参考集 zip 抽取 100 张商品主图到 `data/product_images`
 - [x] FastAPI 通过 `/assets/products/...` 提供商品主图静态资源
 - [x] 商品卡片返回完整 `detail_url`，支持跳转本地商品详情页
+- [x] 主动澄清：如“推荐一款手机”会先追问拍照/续航/性能/性价比和预算
+- [x] 多轮改写补全：澄清后的下一轮会把 `pending_subject` 补回查询
+- [x] 预算解析增强：支持“预算4000”这类预算前置表达，并继续由程序化价格过滤执行
 
 ## 已验证
 
@@ -62,6 +67,9 @@
 - [x] 静态图片接口验证：`/assets/products/p_beauty_021_live.jpg`
 - [x] 商品详情页接口验证：`/products/p_beauty_021`
 - [x] Android Debug 构建和真机安装成功
+- [x] Ark embedding mock 测试：OpenAI-compatible `/embeddings` 请求、batching、index 顺序解析
+- [x] 主动澄清回归：宽泛手机推荐不返回商品卡片，`done` 返回 `needs_clarification=true`
+- [x] 多轮预算回归：手机 -> 拍照优先，预算4000，只返回 4000 元以内商品卡片
 
 ## 当前状态
 
@@ -80,16 +88,16 @@ Android 真机 App
 
 ## 当前限制
 
-- [ ] Chroma 已接入，但当前 embedding 仍是本地 hashing embedding
-- [ ] 还未接入 Doubao embedding
-- [ ] 多轮对话目前是结构预留，尚未做完整查询改写
+- [ ] Ark/Doubao embedding 代码已接入，但默认关闭；需要 `USE_ARK_EMBEDDING=true` 并重新灌库后才走真实向量
+- [ ] 真实 embedding 灌库尚未做端到端计费接口回归，当前自动化测试使用 mock，避免测试阶段触发外部调用
+- [ ] 多轮对话已支持澄清主题补全，但还不是完整 LLM 查询改写/长期记忆
 - [ ] 购物车、多模态、商品对比仍是接口预留
 - [ ] 商品详情页仍是本地模拟页，尚未接真实电商落地页
 
 ## 下一步
 
-1. 接入 Doubao embedding，把本地 hashing embedding 替换为真实语义向量。
-2. 完善多轮查询改写与主动澄清。
+1. 按需打开 `USE_ARK_EMBEDDING=true` 做一次真实 embedding 灌库回归。
+2. 继续完善多轮查询改写，覆盖更多类目和偏好组合。
 3. 从购物车、多模态、商品对比中选择 1-2 个加分项深入实现。
 4. 做 Demo 脚本和答辩截图/录屏材料。
 5. 后续如有真实商品落地页，再替换当前本地模拟页 URL。
