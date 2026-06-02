@@ -24,6 +24,7 @@ def test_product_search_respects_budget_and_keyword() -> None:
 
     assert cards
     assert cards[0]["id"] == "p_beauty_021"
+    assert cards[0]["image_url"].endswith("/assets/products/p_beauty_021_live.jpg")
     assert all(card["price"] <= 250 for card in cards)
 
 

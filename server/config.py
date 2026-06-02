@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     use_chroma: bool = False
     chroma_dir: str = "server/chroma_db"
     product_data_path: str = "data/products_ref.json"
+    product_image_dir: str = "data/product_images"
+    public_base_url: str = "http://127.0.0.1:8000"
 
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",
@@ -36,6 +38,11 @@ class Settings(BaseSettings):
     @property
     def chroma_path(self) -> Path:
         path = Path(self.chroma_dir)
+        return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def product_image_path(self) -> Path:
+        path = Path(self.product_image_dir)
         return path if path.is_absolute() else ROOT_DIR / path
 
 

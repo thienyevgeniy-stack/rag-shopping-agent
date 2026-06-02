@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from server.api.chat import router as chat_router
 from server.config import get_settings
@@ -18,6 +19,12 @@ app.add_middleware(
 )
 
 app.include_router(chat_router)
+settings.product_image_path.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/assets/products",
+    StaticFiles(directory=settings.product_image_path, check_dir=False),
+    name="product_images",
+)
 
 
 @app.get("/health")

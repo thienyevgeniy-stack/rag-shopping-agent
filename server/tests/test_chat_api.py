@@ -26,6 +26,14 @@ def test_health() -> None:
     assert response.json()["status"] == "ok"
 
 
+def test_product_image_asset_is_served() -> None:
+    response = client.get("/assets/products/p_beauty_021_live.jpg")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content.startswith(b"\xff\xd8")
+
+
 def test_chat_stream_returns_tokens_and_product_card() -> None:
     response = client.post(
         "/chat",
@@ -39,6 +47,7 @@ def test_chat_stream_returns_tokens_and_product_card() -> None:
     assert "event: token" in response.text
     assert "event: product_card" in response.text
     assert "科颜氏牛油果保湿眼霜" in response.text
+    assert "http://127.0.0.1:8000/assets/products/p_beauty_021_live.jpg" in response.text
     assert "event: done" in response.text
 
 

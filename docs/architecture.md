@@ -16,6 +16,7 @@ Android Compose
   -> PostProcessor
   -> Doubao/Ark LLM 或模板 fallback
   -> SSE token/product_card/done
+  -> /assets/products 商品主图
 ```
 
 ## 后端扩展点
@@ -25,6 +26,7 @@ Android Compose
 - `InputProcessor`：当前是 `TextProcessor`，后续增加 `ASRProcessor`、`VLMProcessor`
 - `PostProcessor`：当前有 `RangeFilter`、`ExclusionFilter`，后续增加 `ComparisonAggregator`
 - `LLMClient`：当前支持 Ark OpenAI-compatible `/chat/completions` 流式接口；`USE_LLM=true` 且 `ARK_API_KEY` 存在时启用。
+- `StaticFiles`：当前通过 `/assets/products/{filename}` 服务参考集商品主图。
 - SSE 事件：当前支持 `token`、`product_card`、`done`，后续增加 `cart_update`、`comparison_card`
 
 ## Chroma 接入
@@ -51,3 +53,13 @@ Android Compose
 - 候选商品不完全匹配时要如实说明
 
 Orchestrator 会先完成 RAG 检索和后处理，再调用 LLM 生成自然语言回答。如果 LLM 未配置或调用失败，则回退到本地模板回答，保证 Demo 可用性。
+
+## 商品主图链路
+
+`scripts.extract_ref_images` 会从参考数据集 zip 中抽取商品图片到 `data/product_images`。FastAPI 将该目录挂载到 `/assets/products`，`ProductSearchTool` 会把商品 metadata 中的相对图片路径转换为完整 URL，例如：
+
+```text
+http://127.0.0.1:8000/assets/products/p_beauty_021_live.jpg
+```
+
+真机调试时该 URL 通过 `adb reverse tcp:8000 tcp:8000` 被手机访问。Android 端使用 Coil 加载商品图片，点击商品卡片时打开本地详情弹窗。

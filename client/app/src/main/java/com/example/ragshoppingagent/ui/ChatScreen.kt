@@ -2,9 +2,11 @@ package com.example.ragshoppingagent.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -25,16 +28,23 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.example.ragshoppingagent.model.ChatMessage
 import com.example.ragshoppingagent.model.ProductCard
 import com.example.ragshoppingagent.model.Role
@@ -62,6 +72,8 @@ fun ChatScreen(
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
 ) {
+    var selectedProduct by remember { mutableStateOf<ProductCard?>(null) }
+
     Scaffold(
         bottomBar = {
             MessageComposer(
@@ -97,11 +109,18 @@ fun ChatScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(products, key = { it.id }) { product ->
-                        ProductCardItem(product)
+                        ProductCardItem(product, onOpen = { selectedProduct = it })
                     }
                 }
             }
         }
+    }
+
+    selectedProduct?.let { product ->
+        ProductDetailDialog(
+            product = product,
+            onDismiss = { selectedProduct = null },
+        )
     }
 }
 
@@ -129,29 +148,31 @@ private fun MessageBubble(message: ChatMessage) {
 }
 
 @Composable
-private fun ProductCardItem(product: ProductCard) {
-    val uriHandler = LocalUriHandler.current
-
+private fun ProductCardItem(product: ProductCard, onOpen: (ProductCard) -> Unit) {
     Card(
-        onClick = {
-            if (product.detailUrl.isNotBlank()) {
-                uriHandler.openUri(product.detailUrl)
-            }
-        },
-        modifier = Modifier.width(220.dp),
+        onClick = { onOpen(product) },
+        modifier = Modifier.width(232.dp),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(
             modifier = Modifier
-                .heightIn(min = 132.dp)
+                .heightIn(min = 260.dp)
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            ProductImage(
+                imageUrl = product.imageUrl,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1.25f)
+                    .clip(RoundedCornerShape(6.dp)),
+            )
             Text(
                 text = product.name,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
+                maxLines = 3,
             )
             Text(text = product.brand, style = MaterialTheme.typography.labelMedium)
             Text(
@@ -166,6 +187,76 @@ private fun ProductCardItem(product: ProductCard) {
             )
         }
     }
+}
+
+@Composable
+private fun ProductDetailDialog(product: ProductCard, onDismiss: () -> Unit) {
+    val uriHandler = LocalUriHandler.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = product.name, style = MaterialTheme.typography.titleMedium)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ProductImage(
+                    imageUrl = product.imageUrl,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1.35f)
+                        .clip(RoundedCornerShape(8.dp)),
+                )
+                Text(text = "${product.brand} · ${product.category}", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    text = "¥${product.price.toInt()}",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(text = product.reason, style = MaterialTheme.typography.bodyMedium)
+            }
+        },
+        confirmButton = {
+            if (product.detailUrl.isNotBlank()) {
+                TextButton(onClick = { uriHandler.openUri(product.detailUrl) }) {
+                    Text("打开链接")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        },
+    )
+}
+
+@Composable
+private fun ProductImage(imageUrl: String, modifier: Modifier = Modifier) {
+    var failed by remember(imageUrl) { mutableStateOf(false) }
+
+    if (imageUrl.isBlank() || failed) {
+        Box(
+            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "暂无图片",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        return
+    }
+
+    AsyncImage(
+        model = imageUrl,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        onError = { failed = true },
+        modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+    )
 }
 
 @Composable
@@ -210,7 +301,18 @@ private fun ChatScreenPreview() {
                 ChatMessage("1", Role.User, "推荐一款适合油皮的洗面奶"),
                 ChatMessage("2", Role.Assistant, "根据当前商品库检索结果，更匹配你这次需求的是..."),
             ),
-            products = emptyList(),
+            products = listOf(
+                ProductCard(
+                    id = "p_beauty_021",
+                    name = "科颜氏牛油果保湿眼霜滋润补水细腻质地淡化干纹眼周护理28g",
+                    category = "美妆护肤",
+                    brand = "科颜氏",
+                    price = 210.0,
+                    imageUrl = "http://127.0.0.1:8000/assets/products/p_beauty_021_live.jpg",
+                    detailUrl = "",
+                    reason = "匹配眼霜需求",
+                ),
+            ),
             input = "",
             isStreaming = false,
             onInputChange = {},

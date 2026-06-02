@@ -153,7 +153,7 @@ def get_orchestrator() -> Orchestrator:
     store = create_store(settings)
     llm_client = create_llm_client(settings)
     registry = ToolRegistry()
-    registry.register(ProductSearchTool(store))
+    registry.register(ProductSearchTool(store, public_base_url=settings.public_base_url))
     return Orchestrator(registry=registry, sessions=SessionStore(), llm_client=llm_client)
 
 

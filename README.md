@@ -8,7 +8,8 @@
 - 后端提供 `/health` 和 `/chat` SSE 接口
 - 后端支持本地 JSON 商品检索 fallback，也可通过 `USE_CHROMA=true` 启用 Chroma
 - 后端可通过 `USE_LLM=true` 接入 Doubao/Ark 生成回答，失败时自动回退模板回答
-- Android 端已实现 Compose 对话页、SSE 客户端和商品卡片展示
+- 后端通过 `/assets/products/...` 提供商品主图静态资源
+- Android 端已实现 Compose 对话页、SSE 客户端、商品主图卡片和详情弹窗
 - 真实 API Key 通过 `.env` 管理，不进入 Git
 
 ## 目录结构
@@ -48,6 +49,13 @@ cd D:\RAG
 cd D:\RAG
 pip install -r server\requirements.txt
 python -m server.rag.ingest
+```
+
+抽取参考集商品主图：
+
+```powershell
+cd D:\RAG
+python scripts\extract_ref_images.py
 ```
 
 启用 Chroma：
