@@ -42,10 +42,24 @@ data: {"session_id":"demo","filters":[],"exclusions":[],"needs_clarification":fa
 | `token` | 文本增量渲染 |
 | `product_card` | 商品卡片 |
 | `done` | 本轮结束 |
-| `cart_update` | 预留：购物车状态变化 |
+| `cart_update` | 购物车状态变化 |
 | `comparison_card` | 多商品对比结构化结果 |
 
 `done` 事件中的 `needs_clarification=true` 表示本轮是主动澄清，不会返回商品卡片；`pending_subject` 会保留待补全的商品主题，例如“手机”。
+
+购物车请求会额外返回 `cart_update`，例如：
+
+```text
+event: cart_update
+data: {
+  "items": [
+    {"product_id":"p_beauty_021","name":"科颜氏牛油果保湿眼霜","price":210,"quantity":1}
+  ],
+  "total_quantity": 1,
+  "total_price": 210,
+  "is_empty": false
+}
+```
 
 对比请求会额外返回 `comparison_card`，例如：
 

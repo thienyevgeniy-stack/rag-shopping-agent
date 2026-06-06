@@ -17,6 +17,7 @@ class SessionState(BaseModel):
     filters: list[FilterCondition] = Field(default_factory=list)
     exclusions: list[FilterCondition] = Field(default_factory=list)
     candidate_products: list[str] = Field(default_factory=list)
+    candidate_product_cards: list[dict] = Field(default_factory=list)
     pending_subject: str = ""
     cart: list[dict] = Field(default_factory=list)
 

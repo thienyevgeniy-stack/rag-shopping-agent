@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 
 from server.agent.orchestrator import Orchestrator
 from server.session.state import SessionStore
+from server.tools.cart import CartTool
 from server.tools.product_compare import ProductCompareTool
 from server.tools.registry import ToolRegistry
 
@@ -56,6 +57,7 @@ def make_orchestrator(cards: list[dict], llm_client: FakeLLMClient | None) -> Or
     search_tool = FixedSearchTool(cards)
     registry.register(search_tool)
     registry.register(ProductCompareTool(search_tool))
+    registry.register(CartTool())
     return Orchestrator(registry=registry, sessions=SessionStore(), llm_client=llm_client)
 
 
@@ -132,3 +134,128 @@ def test_orchestrator_emits_comparison_card_for_compare_intent() -> None:
     assert any(item["event"] == "comparison_card" for item in events)
     assert sum(1 for item in events if item["event"] == "product_card") == 2
     assert llm.calls == []
+
+
+def test_orchestrator_emits_cart_update_after_add_to_cart() -> None:
+    orchestrator = make_orchestrator(cards=[PRODUCT_CARD], llm_client=None)
+
+    collect_events(orchestrator, "推荐一款眼霜")
+    events = collect_events(orchestrator, "把刚才那款加到购物车")
+
+    assert "已将 科颜氏牛油果保湿眼霜 加入购物车" in token_text(events)
+    cart_update = [item for item in events if item["event"] == "cart_update"][-1]
+    assert cart_update["data"]["total_quantity"] == 1
+    assert cart_update["data"]["items"][0]["product_id"] == "p_beauty_021"
+
+
+def test_orchestrator_answers_contextual_second_product_follow_up() -> None:
+    other_card = {
+        **PRODUCT_CARD,
+        "id": "p_beauty_016",
+        "name": "AHC塑颜修护全脸眼霜",
+        "brand": "AHC",
+        "price": 139.0,
+        "reason": "匹配眼霜需求",
+    }
+    orchestrator = make_orchestrator(cards=[PRODUCT_CARD, other_card], llm_client=None)
+
+    collect_events(orchestrator, "推荐一款眼霜")
+    events = collect_events(orchestrator, "第二个怎么样")
+
+    assert "你说的是 AHC塑颜修护全脸眼霜" in token_text(events)
+    product_card = [item for item in events if item["event"] == "product_card"][-1]
+    assert product_card["data"]["id"] == "p_beauty_016"
+
+
+def test_orchestrator_adds_contextual_price_filter_for_cheaper_follow_up() -> None:
+    registry = ToolRegistry()
+    search_tool = FixedSearchTool([PRODUCT_CARD])
+    registry.register(search_tool)
+    registry.register(ProductCompareTool(search_tool))
+    registry.register(CartTool())
+    orchestrator = Orchestrator(registry=registry, sessions=SessionStore(), llm_client=None)
+
+    collect_events(orchestrator, "推荐一款眼霜")
+    collect_events(orchestrator, "再便宜点")
+
+    assert search_tool.calls[-1]["filters"].max_price == 209
+
+
+def test_orchestrator_answers_contextual_brand_follow_up() -> None:
+    other_card = {
+        **PRODUCT_CARD,
+        "id": "p_beauty_016",
+        "name": "AHC塑颜修护全脸眼霜",
+        "brand": "AHC",
+        "price": 139.0,
+        "reason": "匹配眼霜需求",
+    }
+    orchestrator = make_orchestrator(cards=[PRODUCT_CARD, other_card], llm_client=None)
+
+    collect_events(orchestrator, "推荐一款眼霜")
+    events = collect_events(orchestrator, "刚才你说的 AHC 那个，熬夜党能用吗？")
+
+    assert "你说的是 AHC塑颜修护全脸眼霜" in token_text(events)
+    product_card = [item for item in events if item["event"] == "product_card"][-1]
+    assert product_card["data"]["id"] == "p_beauty_016"
+
+
+def test_orchestrator_adds_referenced_product_quantity_to_cart() -> None:
+    other_card = {
+        **PRODUCT_CARD,
+        "id": "p_beauty_016",
+        "name": "AHC塑颜修护全脸眼霜",
+        "brand": "AHC",
+        "price": 139.0,
+        "reason": "匹配眼霜需求",
+    }
+    orchestrator = make_orchestrator(cards=[PRODUCT_CARD, other_card], llm_client=None)
+
+    collect_events(orchestrator, "推荐一款眼霜")
+    collect_events(orchestrator, "刚才你说的 AHC 那个，熬夜党能用吗？")
+    events = collect_events(orchestrator, "那支给我来两件")
+
+    assert "已将 AHC塑颜修护全脸眼霜 加入购物车，数量 2" in token_text(events)
+    cart_update = [item for item in events if item["event"] == "cart_update"][-1]
+    assert cart_update["data"]["items"][0]["product_id"] == "p_beauty_016"
+    assert cart_update["data"]["items"][0]["quantity"] == 2
+
+
+def test_orchestrator_searches_again_with_soft_exclusion() -> None:
+    registry = ToolRegistry()
+    search_tool = FixedSearchTool([PRODUCT_CARD])
+    registry.register(search_tool)
+    registry.register(ProductCompareTool(search_tool))
+    registry.register(CartTool())
+    orchestrator = Orchestrator(registry=registry, sessions=SessionStore(), llm_client=None)
+
+    collect_events(orchestrator, "推荐一款眼霜")
+    collect_events(orchestrator, "科颜氏先不要了，换个更温和的")
+
+    filters = search_tool.calls[-1]["filters"]
+    assert "科颜氏" in filters.exclusions
+    assert "敏感肌" in filters.keywords
+
+
+def test_orchestrator_uses_referenced_price_for_not_too_expensive_follow_up() -> None:
+    other_card = {
+        **PRODUCT_CARD,
+        "id": "p_beauty_016",
+        "name": "AHC塑颜修护全脸眼霜",
+        "brand": "AHC",
+        "price": 139.0,
+        "reason": "匹配眼霜需求",
+    }
+    registry = ToolRegistry()
+    search_tool = FixedSearchTool([PRODUCT_CARD, other_card])
+    registry.register(search_tool)
+    registry.register(ProductCompareTool(search_tool))
+    registry.register(CartTool())
+    orchestrator = Orchestrator(registry=registry, sessions=SessionStore(), llm_client=None)
+
+    collect_events(orchestrator, "推荐一款眼霜")
+    collect_events(orchestrator, "有没有比第二款更适合敏感肌但别太贵的")
+
+    filters = search_tool.calls[-1]["filters"]
+    assert filters.max_price == 139
+    assert "敏感肌" in filters.keywords

@@ -1,6 +1,6 @@
 # 项目进度
 
-更新时间：2026-06-03
+更新时间：2026-06-06
 
 ## 已完成
 
@@ -49,10 +49,17 @@
 - [x] 商品卡片返回完整 `detail_url`，支持跳转本地商品详情页
 - [x] 主动澄清：如“推荐一款手机”会先追问拍照/续航/性能/性价比和预算
 - [x] 多轮改写补全：澄清后的下一轮会把 `pending_subject` 补回查询
+- [x] 上下文追问增强：支持“第二个怎么样”“这个适合吗”“再便宜点”等轻量跟进
 - [x] 预算解析增强：支持“预算4000”这类预算前置表达，并继续由程序化价格过滤执行
 - [x] 商品对比：识别“X 和 Y / X vs Y / X 与 Y”，分别检索双方候选并返回 `comparison_card`
 - [x] 对比预算处理：对比时保留双方候选解释差异，推荐结论优先选择预算内商品
 - [x] Android 端渲染 `comparison_card`：展示推荐结论、关注点、双方优势和取舍
+- [x] 对话式购物车：支持加购、查看、删除、修改数量和模拟下单确认
+- [x] Android 端渲染 `cart_update`：展示购物车总件数、总价和最近商品，商品行可点击打开详情
+- [x] 后端智能体工程化拆分：Orchestrator 收窄为预处理和调度层，具体任务由 `AgentWorkflow` 和 handlers 承接
+- [x] 外部 RAG/Agent 成熟化参考梳理：新增 `docs/rag_product_maturity.md`
+- [x] 新增 `SemanticPlanner`：规则 fallback 默认启用，`USE_SEMANTIC_LLM=true` 时支持 LLM JSON plan + Pydantic 校验
+- [x] 上下文泛化增强：支持品牌/名称引用、隐式加购数量、候选商品排除、参考价格继续检索
 
 ## 已验证
 
@@ -73,9 +80,14 @@
 - [x] Ark embedding mock 测试：OpenAI-compatible `/embeddings` 请求、batching、index 顺序解析
 - [x] 主动澄清回归：宽泛手机推荐不返回商品卡片，`done` 返回 `needs_clarification=true`
 - [x] 多轮预算回归：手机 -> 拍照优先，预算4000，只返回 4000 元以内商品卡片
+- [x] 上下文追问回归：推荐后问“第二个怎么样”会围绕上一轮第二个商品回答
+- [x] 上下文价格回归：推荐后问“再便宜点”会追加低于上一轮候选的预算过滤
 - [x] 商品对比回归：科颜氏 vs AHC 眼霜返回两侧商品卡和 `comparison_card`
 - [x] 对比预算回归：小米 vs OPPO 拍照手机预算 4000 时，结论推荐预算内商品
+- [x] 购物车回归：推荐商品后说“把刚才那款加到购物车”会返回 `cart_update`
 - [x] Android Kotlin 编译验证：`:app:compileDebugKotlin`
+- [x] AgentWorkflow 关键回归：澄清、LLM fallback、商品对比、上下文追问和购物车测试通过
+- [x] SemanticPlanner 回归：`AHC 那个`、`那支来两件`、`科颜氏先不要了`、`比第二款更适合敏感肌但别太贵` 测试通过
 
 ## 当前状态
 
@@ -86,24 +98,27 @@ Android 真机 App
   -> OkHttp SSE
   -> adb reverse
   -> FastAPI /chat
+  -> SemanticPlanner
+  -> AgentWorkflow
   -> JSON/Chroma 商品检索
   -> Doubao-Seed grounded answer
-  -> 流式 token + product_card + comparison_card
-  -> 手机端展示商品主图卡片、对比面板和详情弹窗
+  -> 流式 token + product_card + comparison_card + cart_update
+  -> 手机端展示商品主图卡片、对比面板、购物车面板和详情弹窗
 ```
 
 ## 当前限制
 
 - [ ] Ark/Doubao embedding 代码已接入，但默认关闭；需要 `USE_ARK_EMBEDDING=true` 并重新灌库后才走真实向量
 - [ ] 真实 embedding 灌库尚未做端到端计费接口回归，当前自动化测试使用 mock，避免测试阶段触发外部调用
-- [ ] 多轮对话已支持澄清主题补全，但还不是完整 LLM 查询改写/长期记忆
-- [ ] 购物车、多模态仍是接口预留
+- [ ] 多轮对话已支持澄清主题补全、商品指代和轻量价格追问，但还不是完整长期记忆
+- [ ] 购物车已支持本地模拟闭环，但尚未接真实支付、地址或订单系统
+- [ ] 多模态仍是接口预留
 - [ ] 商品详情页仍是本地模拟页，尚未接真实电商落地页
 
 ## 下一步
 
 1. 按需打开 `USE_ARK_EMBEDDING=true` 做一次真实 embedding 灌库回归。
 2. 继续完善多轮查询改写，覆盖更多类目和偏好组合。
-3. 从购物车、多模态中选择 1 个加分项深入实现。
+3. 从多模态、真实 embedding 灌库回归或 Demo 录屏中选择 1 个方向深入实现。
 4. 做 Demo 脚本和答辩截图/录屏材料。
 5. 后续如有真实商品落地页，再替换当前本地模拟页 URL。

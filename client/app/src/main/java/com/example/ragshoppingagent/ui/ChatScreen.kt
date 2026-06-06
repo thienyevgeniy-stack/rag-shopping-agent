@@ -1,6 +1,7 @@
 package com.example.ragshoppingagent.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +18,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,6 +47,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.ragshoppingagent.model.CartItem
+import com.example.ragshoppingagent.model.CartState
 import com.example.ragshoppingagent.model.ChatMessage
 import com.example.ragshoppingagent.model.ComparisonCard
 import com.example.ragshoppingagent.model.ComparisonProduct
@@ -61,6 +64,7 @@ fun ChatRoute(viewModel: ChatViewModel = viewModel()) {
         messages = state.messages,
         products = state.products,
         comparison = state.comparison,
+        cart = state.cart,
         input = state.input,
         isStreaming = state.isStreaming,
         onInputChange = viewModel::onInputChange,
@@ -73,6 +77,7 @@ fun ChatScreen(
     messages: List<ChatMessage>,
     products: List<ProductCard>,
     comparison: ComparisonCard?,
+    cart: CartState?,
     input: String,
     isStreaming: Boolean,
     onInputChange: (String) -> Unit,
@@ -108,6 +113,14 @@ fun ChatScreen(
                 }
             }
 
+            cart?.let {
+                CartPanel(
+                    cart = it,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    onOpenItem = { item -> selectedProduct = item.toProductCard() },
+                )
+            }
+
             comparison?.let {
                 ComparisonPanel(
                     comparison = it,
@@ -135,6 +148,114 @@ fun ChatScreen(
             onDismiss = { selectedProduct = null },
         )
     }
+}
+
+@Composable
+private fun CartPanel(
+    cart: CartState,
+    modifier: Modifier = Modifier,
+    onOpenItem: (CartItem) -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(8.dp),
+        tonalElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "购物车",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = "${cart.totalQuantity} 件 · ¥${cart.totalPrice.toInt()}",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+
+            if (cart.isEmpty) {
+                Text(
+                    text = "当前购物车为空",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            } else {
+                cart.items.takeLast(3).forEach { item ->
+                    CartItemRow(item = item, onOpen = { onOpenItem(item) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CartItemRow(item: CartItem, onOpen: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(6.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpen)
+                .padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = item.brand.ifBlank { item.category },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = "×${item.quantity}",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "¥${(item.price * item.quantity).toInt()}",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+private fun CartItem.toProductCard(): ProductCard {
+    return ProductCard(
+        id = productId,
+        name = name,
+        category = category,
+        brand = brand,
+        price = price,
+        imageUrl = imageUrl,
+        detailUrl = detailUrl,
+        reason = "购物车商品",
+    )
 }
 
 @Composable
@@ -398,7 +519,7 @@ private fun MessageComposer(
             onClick = onSend,
             enabled = enabled && value.isNotBlank(),
         ) {
-            Icon(imageVector = Icons.Filled.Send, contentDescription = "发送")
+            Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = "发送")
         }
     }
 }
@@ -455,6 +576,23 @@ private fun ChatScreenPreview() {
                     focus = "保湿/干皮",
                     summary = "更偏向 保湿/干皮 时，优先看 科颜氏牛油果保湿眼霜。",
                 ),
+            ),
+            cart = CartState(
+                items = listOf(
+                    CartItem(
+                        productId = "p_beauty_021",
+                        name = "科颜氏牛油果保湿眼霜滋润补水细腻质地淡化干纹眼周护理28g",
+                        brand = "科颜氏",
+                        category = "美妆护肤",
+                        price = 210.0,
+                        quantity = 1,
+                        imageUrl = "",
+                        detailUrl = "",
+                    ),
+                ),
+                totalQuantity = 1,
+                totalPrice = 210.0,
+                isEmpty = false,
             ),
             input = "",
             isStreaming = false,

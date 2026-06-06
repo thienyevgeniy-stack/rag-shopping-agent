@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
     ark_model: str = "ep-20260514111645-lmgt2"
     use_llm: bool = False
+    use_semantic_llm: bool = False
     llm_timeout_seconds: float = 45.0
     use_ark_embedding: bool = False
     ark_embedding_model: str = "doubao-embedding-text-240515"

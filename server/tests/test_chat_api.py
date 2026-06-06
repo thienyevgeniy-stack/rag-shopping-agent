@@ -94,3 +94,28 @@ def test_chat_compare_returns_comparison_card() -> None:
     assert "event: comparison_card" in response.text
     assert "event: product_card" in response.text
     assert "我先基于当前商品库做对比" in collect_token_text(response.text)
+
+
+def test_chat_cart_update_after_product_recommendation() -> None:
+    session_id = "pytest-cart-api"
+    first = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "推荐一款保湿眼霜，预算250以内",
+        },
+    )
+    second = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "把刚才那款加到购物车",
+        },
+    )
+
+    assert first.status_code == 200
+    assert "event: product_card" in first.text
+    assert second.status_code == 200
+    assert "event: cart_update" in second.text
+    assert "科颜氏牛油果保湿眼霜" in second.text
+    assert '"total_quantity": 1' in second.text
