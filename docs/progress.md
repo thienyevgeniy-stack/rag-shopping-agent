@@ -1,6 +1,6 @@
 # 项目进度
 
-更新时间：2026-06-02
+更新时间：2026-06-03
 
 ## 已完成
 
@@ -52,6 +52,7 @@
 - [x] 预算解析增强：支持“预算4000”这类预算前置表达，并继续由程序化价格过滤执行
 - [x] 商品对比：识别“X 和 Y / X vs Y / X 与 Y”，分别检索双方候选并返回 `comparison_card`
 - [x] 对比预算处理：对比时保留双方候选解释差异，推荐结论优先选择预算内商品
+- [x] Android 端渲染 `comparison_card`：展示推荐结论、关注点、双方优势和取舍
 
 ## 已验证
 
@@ -74,6 +75,7 @@
 - [x] 多轮预算回归：手机 -> 拍照优先，预算4000，只返回 4000 元以内商品卡片
 - [x] 商品对比回归：科颜氏 vs AHC 眼霜返回两侧商品卡和 `comparison_card`
 - [x] 对比预算回归：小米 vs OPPO 拍照手机预算 4000 时，结论推荐预算内商品
+- [x] Android Kotlin 编译验证：`:app:compileDebugKotlin`
 
 ## 当前状态
 
@@ -86,8 +88,8 @@ Android 真机 App
   -> FastAPI /chat
   -> JSON/Chroma 商品检索
   -> Doubao-Seed grounded answer
-  -> 流式 token + product_card
-  -> 手机端展示商品主图卡片和详情弹窗
+  -> 流式 token + product_card + comparison_card
+  -> 手机端展示商品主图卡片、对比面板和详情弹窗
 ```
 
 ## 当前限制
@@ -95,7 +97,6 @@ Android 真机 App
 - [ ] Ark/Doubao embedding 代码已接入，但默认关闭；需要 `USE_ARK_EMBEDDING=true` 并重新灌库后才走真实向量
 - [ ] 真实 embedding 灌库尚未做端到端计费接口回归，当前自动化测试使用 mock，避免测试阶段触发外部调用
 - [ ] 多轮对话已支持澄清主题补全，但还不是完整 LLM 查询改写/长期记忆
-- [ ] 商品对比后端已实现，但 Android 端暂未单独渲染 `comparison_card`，当前通过文本回答和商品卡片演示
 - [ ] 购物车、多模态仍是接口预留
 - [ ] 商品详情页仍是本地模拟页，尚未接真实电商落地页
 
@@ -103,6 +104,6 @@ Android 真机 App
 
 1. 按需打开 `USE_ARK_EMBEDDING=true` 做一次真实 embedding 灌库回归。
 2. 继续完善多轮查询改写，覆盖更多类目和偏好组合。
-3. 在 Android 端渲染 `comparison_card`，或从购物车、多模态中选择 1 个加分项深入实现。
+3. 从购物车、多模态中选择 1 个加分项深入实现。
 4. 做 Demo 脚本和答辩截图/录屏材料。
 5. 后续如有真实商品落地页，再替换当前本地模拟页 URL。

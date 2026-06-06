@@ -76,7 +76,7 @@ python -m server.rag.ingest
 
 - `token`：确定性对比回答，关闭 LLM 时也可稳定演示。
 - `product_card`：两侧候选商品卡片。
-- `comparison_card`：结构化对比数据，便于后续 Android 端做专门 UI。
+- `comparison_card`：结构化对比数据，Android 端会渲染为对比面板。
 
 ## Doubao/Ark 生成接入
 
@@ -97,7 +97,7 @@ Orchestrator 会先完成 RAG 检索和后处理，再调用 LLM 生成自然语
 http://127.0.0.1:8000/assets/products/p_beauty_021_live.jpg
 ```
 
-真机调试时该 URL 通过 `adb reverse tcp:8000 tcp:8000` 被手机访问。Android 端使用 Coil 加载商品图片，点击商品卡片时打开本地详情弹窗。
+真机调试时该 URL 通过 `adb reverse tcp:8000 tcp:8000` 被手机访问。Android 端使用 Coil 加载商品图片，点击商品卡片时打开本地详情弹窗；收到 `comparison_card` 时会展示对比面板。
 
 商品卡片中的 `detail_url` 指向本地商品详情页：
 

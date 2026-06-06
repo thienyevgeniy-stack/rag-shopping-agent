@@ -2,6 +2,7 @@ package com.example.ragshoppingagent.viewmodel
 
 import androidx.lifecycle.ViewModel
 import com.example.ragshoppingagent.model.ChatMessage
+import com.example.ragshoppingagent.model.ComparisonCard
 import com.example.ragshoppingagent.model.ProductCard
 import com.example.ragshoppingagent.model.Role
 import com.example.ragshoppingagent.network.ChatSseClient
@@ -13,6 +14,7 @@ import java.util.UUID
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val products: List<ProductCard> = emptyList(),
+    val comparison: ComparisonCard? = null,
     val input: String = "",
     val isStreaming: Boolean = false,
 )
@@ -38,6 +40,7 @@ class ChatViewModel : ViewModel() {
                 input = "",
                 isStreaming = true,
                 products = emptyList(),
+                comparison = null,
                 messages = it.messages +
                     ChatMessage(UUID.randomUUID().toString(), Role.User, text) +
                     ChatMessage(assistantId, Role.Assistant, ""),
@@ -49,6 +52,7 @@ class ChatViewModel : ViewModel() {
             message = text,
             onToken = { token -> appendAssistantToken(assistantId, token) },
             onProduct = { product -> _uiState.update { it.copy(products = it.products + product) } },
+            onComparison = { comparison -> _uiState.update { it.copy(comparison = comparison) } },
             onDone = { _uiState.update { it.copy(isStreaming = false) } },
             onError = { error ->
                 appendAssistantToken(assistantId, "\n请求失败：${error.message ?: "未知错误"}")

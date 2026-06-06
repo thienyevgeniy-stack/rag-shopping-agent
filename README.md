@@ -13,7 +13,7 @@
 - 后端支持商品对比：识别品牌/商品对，返回对比回答、商品卡片和 `comparison_card`
 - 后端通过 `/assets/products/...` 提供商品主图静态资源
 - 后端通过 `/products/{id}` 提供本地商品详情页
-- Android 端已实现 Compose 对话页、SSE 客户端、商品主图卡片、详情弹窗和落地页跳转
+- Android 端已实现 Compose 对话页、SSE 客户端、商品主图卡片、对比面板、详情弹窗和落地页跳转
 - 真实 API Key 通过 `.env` 管理，不进入 Git
 
 ## 目录结构
@@ -117,8 +117,8 @@ Invoke-WebRequest `
 
 1. 已跑通最小闭环：Android 输入 → FastAPI → 检索 → Doubao/模板生成 → SSE 回复 → 商品主图卡片 → 商品详情页
 2. 已接入 Chroma 持久化链路、Ark/Doubao embedding 适配和 Doubao/Ark 回答生成
-3. 已实现基础主动澄清、澄清主题补全和商品对比
-4. 下一步从购物车、多模态、端侧对比卡渲染中选择 1-2 个加分项深入实现
+3. 已实现基础主动澄清、澄清主题补全、商品对比和端侧对比面板
+4. 下一步从购物车、多模态、真实 embedding 灌库回归中选择 1-2 个加分项深入实现
 
 详细设计见 [docs/architecture.md](docs/architecture.md)、[docs/api.md](docs/api.md) 和 [docs/progress.md](docs/progress.md)。
 

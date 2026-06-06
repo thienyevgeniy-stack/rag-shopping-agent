@@ -41,11 +41,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.ragshoppingagent.model.ChatMessage
+import com.example.ragshoppingagent.model.ComparisonCard
+import com.example.ragshoppingagent.model.ComparisonProduct
+import com.example.ragshoppingagent.model.ComparisonRecommendation
 import com.example.ragshoppingagent.model.ProductCard
 import com.example.ragshoppingagent.model.Role
 import com.example.ragshoppingagent.viewmodel.ChatViewModel
@@ -56,6 +60,7 @@ fun ChatRoute(viewModel: ChatViewModel = viewModel()) {
     ChatScreen(
         messages = state.messages,
         products = state.products,
+        comparison = state.comparison,
         input = state.input,
         isStreaming = state.isStreaming,
         onInputChange = viewModel::onInputChange,
@@ -67,6 +72,7 @@ fun ChatRoute(viewModel: ChatViewModel = viewModel()) {
 fun ChatScreen(
     messages: List<ChatMessage>,
     products: List<ProductCard>,
+    comparison: ComparisonCard?,
     input: String,
     isStreaming: Boolean,
     onInputChange: (String) -> Unit,
@@ -102,6 +108,13 @@ fun ChatScreen(
                 }
             }
 
+            comparison?.let {
+                ComparisonPanel(
+                    comparison = it,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+
             if (products.isNotEmpty()) {
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
@@ -122,6 +135,104 @@ fun ChatScreen(
             onDismiss = { selectedProduct = null },
         )
     }
+}
+
+@Composable
+private fun ComparisonPanel(comparison: ComparisonCard, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(8.dp),
+        tonalElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = comparison.title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (comparison.recommendation.summary.isNotBlank()) {
+                Text(
+                    text = comparison.recommendation.summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (comparison.recommendation.focus.isNotBlank()) {
+                Text(
+                    text = "关注点：${comparison.recommendation.focus}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            comparison.products.take(3).forEach { product ->
+                ComparisonProductRow(
+                    product = product,
+                    isRecommended = product.id == comparison.recommendation.productId,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComparisonProductRow(product: ComparisonProduct, isRecommended: Boolean) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(6.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = product.brand.ifBlank { product.category },
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = if (isRecommended) "推荐 · ¥${product.price.toInt()}" else "¥${product.price.toInt()}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (isRecommended) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text(
+                text = product.name,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "优势：${formatComparisonList(product.strengths)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "取舍：${formatComparisonList(product.tradeoffs)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private fun formatComparisonList(values: List<String>): String {
+    return values.take(3).joinToString("、").ifBlank { "需结合个人偏好确认" }
 }
 
 @Composable
@@ -311,6 +422,38 @@ private fun ChatScreenPreview() {
                     imageUrl = "http://127.0.0.1:8000/assets/products/p_beauty_021_live.jpg",
                     detailUrl = "",
                     reason = "匹配眼霜需求",
+                ),
+            ),
+            comparison = ComparisonCard(
+                title = "商品对比",
+                query = "科颜氏和AHC哪个眼霜更适合干皮",
+                products = listOf(
+                    ComparisonProduct(
+                        id = "p_beauty_021",
+                        name = "科颜氏牛油果保湿眼霜滋润补水细腻质地淡化干纹眼周护理28g",
+                        brand = "科颜氏",
+                        category = "美妆护肤",
+                        price = 210.0,
+                        reason = "匹配 眼霜, 科颜氏 等需求",
+                        strengths = listOf("保湿", "补水"),
+                        tradeoffs = listOf("需结合个人偏好确认"),
+                    ),
+                    ComparisonProduct(
+                        id = "p_beauty_016",
+                        name = "AHC塑颜修护全脸眼霜紧致淡纹保湿提亮多效眼周护理30ml",
+                        brand = "AHC",
+                        category = "美妆护肤",
+                        price = 139.0,
+                        reason = "匹配 眼霜, AHC 等需求",
+                        strengths = listOf("保湿", "修护"),
+                        tradeoffs = listOf("价格更低"),
+                    ),
+                ),
+                recommendation = ComparisonRecommendation(
+                    productId = "p_beauty_021",
+                    productName = "科颜氏牛油果保湿眼霜滋润补水细腻质地淡化干纹眼周护理28g",
+                    focus = "保湿/干皮",
+                    summary = "更偏向 保湿/干皮 时，优先看 科颜氏牛油果保湿眼霜。",
                 ),
             ),
             input = "",

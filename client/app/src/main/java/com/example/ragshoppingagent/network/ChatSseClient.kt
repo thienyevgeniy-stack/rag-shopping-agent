@@ -1,5 +1,6 @@
 package com.example.ragshoppingagent.network
 
+import com.example.ragshoppingagent.model.ComparisonCard
 import com.example.ragshoppingagent.model.ProductCard
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -25,6 +26,7 @@ class ChatSseClient(
         message: String,
         onToken: (String) -> Unit,
         onProduct: (ProductCard) -> Unit,
+        onComparison: (ComparisonCard) -> Unit,
         onDone: () -> Unit,
         onError: (Throwable) -> Unit,
     ): EventSource {
@@ -52,6 +54,7 @@ class ChatSseClient(
                     when (type) {
                         "token" -> onToken(json.optString("text"))
                         "product_card" -> onProduct(ProductCard.fromJson(json))
+                        "comparison_card" -> onComparison(ComparisonCard.fromJson(json))
                         "done" -> onDone()
                     }
                 }
