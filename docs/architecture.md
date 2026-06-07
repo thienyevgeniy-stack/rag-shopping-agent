@@ -25,12 +25,12 @@ Android Compose
 
 ## 后端扩展点
 
-- `VectorStore`：当前支持 `LocalJsonVectorStore` 和 `ChromaStore`。未安装 Chroma 或未启用时使用 JSON fallback；设置 `USE_CHROMA=true` 后走 Chroma。
+- `VectorStore`：当前支持 `LocalJsonVectorStore` 和 `ChromaStore`。未安装 Chroma 或未启用时使用 JSON fallback；设置 `USE_CHROMA=true` 后走 Chroma。检索接口支持 `VectorSearchFilters`，可把 `product_type` 和价格过滤下推到 store。
 - `SemanticPlanner`：先把用户自然语言解析为结构化 `SemanticPlan`。LLM 可用时尝试 JSON plan，失败或不可用时走规则 fallback；后端再用 Pydantic 校验和工具执行，避免模型直接改状态。
 - `AgentWorkflow`：当前是轻量内部工作流，按澄清、购物车、对比、上下文追问、普通推荐的优先级分派；后续可替换为 LangChain/LangGraph 类 planner，而不影响 API 和 Android 端协议。
 - `ToolRegistry`：当前注册 `search_products`、`compare_products` 和 `manage_cart`
 - `InputProcessor`：当前是 `TextProcessor`，后续增加 `ASRProcessor`、`VLMProcessor`
-- `PostProcessor`：当前有 `RangeFilter`、`KeywordFilter`、`ExclusionFilter`
+- `PostProcessor`：当前有 `RangeFilter`、`ProductTypeFilter`、`KeywordFilter`、`ExclusionFilter`。即使 store 已经做 metadata 预过滤，后处理仍作为安全兜底，保证旧索引或 fallback 场景下结果正确。
 - `LLMClient`：当前支持 Ark OpenAI-compatible `/chat/completions` 流式接口；`USE_LLM=true` 且 `ARK_API_KEY` 存在时启用。
 - `StaticFiles`：当前通过 `/assets/products/{filename}` 服务参考集商品主图。
 - `Products API`：当前通过 `/products/{product_id}` 提供本地商品详情 HTML 页。

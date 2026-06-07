@@ -65,6 +65,10 @@
 - [x] 离线评估集和脚本：`data/eval_queries.jsonl`、`python scripts/evaluate_agent.py`
 - [x] 商品 taxonomy/facet 过滤：`data/product_taxonomy.json` 维护标准 `product_type`，支持别名和组合触发词，检索文档加载时写入类型元数据，`运动鞋/跑鞋/跑步鞋/跑步的鞋` 不再混入运动裤、短裤等同大类商品
 - [x] 同 facet 多选 OR：`运动鞋或运动裤` 会返回鞋或裤，不要求一个商品同时满足两个类型
+- [x] 会话过滤生命周期：用户显式切换主商品类型时，会清理旧品类、旧关键词、旧预算和旧排除条件，避免“眼霜 -> 手机”这类长会话污染
+- [x] 大库检索优化：`VectorStore.query` 支持 `VectorSearchFilters`，本地 JSON fallback 使用商品类型倒排索引、文档 token/title 特征缓存和 Top-K 堆选择，Chroma metadata 写入类型布尔标记并支持 `where` 下推
+- [x] 性能压测脚本：`python scripts\benchmark_retrieval.py --store local|chroma --sizes ... --runs ... --output ...`
+- [x] 性能压测报告：`docs/retrieval_benchmark_2026-06-07.md`
 
 ## 已验证
 
@@ -95,7 +99,9 @@
 - [x] SemanticPlanner 回归：`AHC 那个`、`那支来两件`、`科颜氏先不要了`、`比第二款更适合敏感肌但别太贵` 测试通过
 - [x] Trace API 回归：`/debug/traces` 可返回最近一次 handler、plan 和结构化事件摘要
 - [x] 运动鞋回归：`推荐一款运动鞋` 触发 `clothes.sports_shoes` 类型过滤，只返回鞋类商品，不返回运动裤
-- [x] 离线评估回归：当前 `data/eval_queries.jsonl` 10/10 turns 通过
+- [x] 跨品类状态回归：眼霜推荐后再问手机，会清理旧眼霜/预算过滤并重新触发手机澄清
+- [x] 离线评估回归：当前 `data/eval_queries.jsonl` 12/12 turns 通过
+- [x] 检索压测冒烟：本地 fallback 合成 50k 商品库查询约 16-130ms，Chroma 合成 1k 商品库查询约 33-178ms，报告可输出为 JSON
 
 ## 当前状态
 
@@ -119,6 +125,8 @@ Android 真机 App
 
 - [ ] Ark/Doubao embedding 代码已接入，但默认关闭；需要 `USE_ARK_EMBEDDING=true` 并重新灌库后才走真实向量
 - [ ] 真实 embedding 灌库尚未做端到端计费接口回归，当前自动化测试使用 mock，避免测试阶段触发外部调用
+- [ ] 本地 fallback 50k 查询延迟可接受，但建索引约 72 秒；生产大库应使用持久化 Chroma，避免每次启动重建
+- [ ] Chroma metadata where 已完成 1k 冒烟压测；真实生产规模仍需对 Chroma + 真实 embedding + metadata where 做 10k/50k 端到端压测
 - [ ] 多轮对话已支持澄清主题补全、商品指代和轻量价格追问，但还不是完整长期记忆
 - [ ] 购物车已支持本地模拟闭环，但尚未接真实支付、地址或订单系统
 - [ ] 多模态仍是接口预留
@@ -126,10 +134,10 @@ Android 真机 App
 
 ## 下一步
 
-1. 按需打开 `USE_ARK_EMBEDDING=true` 做一次真实 embedding 灌库回归。
+1. 按需打开 `USE_CHROMA=true` 和 `USE_ARK_EMBEDDING=true` 做一次真实 embedding 灌库回归，并用 `benchmark_retrieval.py --store chroma` 对 10k/50k Chroma 路径做压测。
 2. 继续完善 taxonomy 覆盖面，把更多商品类型、品牌和功效词沉淀为可配置元数据，并为 taxonomy 变更建立索引重灌/回归提醒。
 3. 继续完善多轮查询改写，覆盖更多类目和偏好组合。
 4. 扩充离线评估集，覆盖更多类目、失败样例、长链多轮和购物车边界条件。
 5. 从 rerank、多模态、真实 embedding 灌库回归或 Demo 录屏中选择 1 个方向深入实现。
-5. 做 Demo 脚本和答辩截图/录屏材料。
-6. 后续如有真实商品落地页，再替换当前本地模拟页 URL。
+6. 做 Demo 脚本和答辩截图/录屏材料。
+7. 后续如有真实商品落地页，再替换当前本地模拟页 URL。

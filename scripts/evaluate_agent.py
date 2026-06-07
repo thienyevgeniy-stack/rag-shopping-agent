@@ -90,13 +90,20 @@ def check_expectations(expect: dict[str, Any], events: list[dict], trace: dict) 
         if actual != expect["needs_clarification"]:
             failures.append(f"needs_clarification expected {expect['needs_clarification']}, got {actual}")
 
-    expected_filters = expect.get("filters", {})
     actual_filters = trace.get("filters", {})
+    expected_filters = expect.get("filters", {})
     for key, values in expected_filters.items():
-        actual_values = actual_filters.get(key, [])
+        actual_values = filter_values(actual_filters.get(key))
         for value in values:
             if value not in actual_values:
                 failures.append(f"filter {key} missing {value}")
+
+    forbidden_filters = expect.get("filters_not", {})
+    for key, values in forbidden_filters.items():
+        actual_values = filter_values(actual_filters.get(key))
+        for value in values:
+            if value in actual_values:
+                failures.append(f"filter {key} unexpectedly contains {value}")
 
     allowed_card_product_types = set(expect.get("allowed_card_product_types", []))
     if allowed_card_product_types:
@@ -114,6 +121,14 @@ def check_expectations(expect: dict[str, Any], events: list[dict], trace: dict) 
             failures.append(f"missing product card type {product_type}")
 
     return failures
+
+
+def filter_values(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
 
 
 def load_cases(path: Path) -> list[dict]:

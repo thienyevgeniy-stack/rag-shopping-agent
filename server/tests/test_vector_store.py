@@ -7,8 +7,14 @@ from server.rag.vector_store import (
     ArkEmbeddingFunction,
     ChromaStore,
     HashingEmbeddingFunction,
+    LocalJsonVectorStore,
+    VectorSearchFilters,
+    build_chroma_embedding_function,
+    build_chroma_where,
     load_product_documents,
     parse_embedding_response,
+    product_type_filter_key,
+    to_chroma_metadata,
 )
 
 
@@ -38,6 +44,22 @@ def test_chroma_store_round_trip(tmp_path: Path) -> None:
     assert any(hit["metadata"]["id"] == "p_beauty_021" for hit in hits)
 
 
+def test_chroma_store_applies_metadata_filters(tmp_path: Path) -> None:
+    pytest.importorskip("chromadb")
+    documents = load_product_documents(ROOT_DIR / "data" / "products_ref.json")
+    store = ChromaStore(tmp_path / "chroma")
+    store.add(documents)
+
+    hits = store.query(
+        "推荐运动",
+        top_k=10,
+        filters=VectorSearchFilters(product_types=("clothes.sports_pants",)),
+    )
+
+    assert hits
+    assert all("clothes.sports_pants" in hit["metadata"]["product_types"] for hit in hits)
+
+
 def test_product_documents_include_normalized_product_types() -> None:
     documents = load_product_documents(ROOT_DIR / "data" / "products_ref.json")
     by_id = {document.id: document.metadata for document in documents}
@@ -45,6 +67,73 @@ def test_product_documents_include_normalized_product_types() -> None:
     assert "clothes.sports_shoes" in by_id["p_clothes_007"]["product_types"]
     assert "clothes.sports_shoes" not in by_id["p_clothes_004"]["product_types"]
     assert "clothes.sports_pants" in by_id["p_clothes_004"]["product_types"]
+
+
+def test_local_json_store_applies_metadata_prefilters() -> None:
+    store = LocalJsonVectorStore(ROOT_DIR / "data" / "products_ref.json")
+
+    hits = store.query(
+        "跑鞋",
+        top_k=20,
+        filters=VectorSearchFilters(max_price=900, product_types=("clothes.sports_shoes",)),
+    )
+
+    assert hits
+    assert all(float(hit["metadata"]["price"]) <= 900 for hit in hits)
+    assert all("clothes.sports_shoes" in hit["metadata"]["product_types"] for hit in hits)
+
+
+def test_local_json_store_can_be_built_from_documents() -> None:
+    all_documents = load_product_documents(ROOT_DIR / "data" / "products_ref.json")
+    documents = [document for document in all_documents if document.id in {"p_beauty_021", "p_beauty_016"}]
+    store = LocalJsonVectorStore.from_documents(documents)
+
+    assert store.documents == documents
+    assert store.query("眼霜", top_k=3)
+
+
+def test_chroma_metadata_includes_product_type_filter_flags() -> None:
+    documents = load_product_documents(ROOT_DIR / "data" / "products_ref.json")
+    shoe = next(document for document in documents if document.id == "p_clothes_007")
+
+    metadata = to_chroma_metadata(shoe.metadata)
+
+    assert metadata[product_type_filter_key("clothes.sports_shoes")] is True
+
+
+def test_build_chroma_where_combines_price_and_product_type_filters() -> None:
+    where = build_chroma_where(
+        VectorSearchFilters(
+            max_price=900,
+            product_types=("clothes.sports_shoes", "clothes.sports_pants"),
+        )
+    )
+
+    assert where == {
+        "$and": [
+            {"price": {"$lte": 900.0}},
+            {
+                "$or": [
+                    {product_type_filter_key("clothes.sports_shoes"): True},
+                    {product_type_filter_key("clothes.sports_pants"): True},
+                ]
+            },
+        ]
+    }
+
+
+def test_chroma_collection_name_includes_index_schema_version() -> None:
+    _, collection_name = build_chroma_embedding_function(
+        use_ark_embedding=False,
+        api_key="",
+        base_url="https://example.test",
+        model="embedding-model",
+        timeout_seconds=1,
+        batch_size=1,
+        collection_name="products",
+    )
+
+    assert collection_name == "products_v2_metadata_filters"
 
 
 def test_parse_embedding_response_orders_vectors_by_index() -> None:

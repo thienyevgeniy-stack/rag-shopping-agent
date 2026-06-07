@@ -3,7 +3,7 @@ from urllib.parse import quote, urlparse
 
 from server.rag.post_process import ExclusionFilter, KeywordFilter, ProductTypeFilter, RangeFilter, SearchFilters
 from server.rag.taxonomy import enrich_product_type_metadata, product_type_display_names
-from server.rag.vector_store import VectorStore
+from server.rag.vector_store import VectorSearchFilters, VectorStore
 
 
 class ProductSearchTool:
@@ -15,7 +15,14 @@ class ProductSearchTool:
         self.post_processors = [RangeFilter(), ProductTypeFilter(), KeywordFilter(), ExclusionFilter()]
 
     def run(self, query: str, filters: SearchFilters, top_k: int = 5) -> list[dict]:
-        hits = self.store.query(query=query, top_k=max(top_k * 10, 50))
+        hits = self.store.query(
+            query=query,
+            top_k=max(top_k * 10, 50),
+            filters=VectorSearchFilters(
+                max_price=filters.max_price,
+                product_types=tuple(filters.product_types),
+            ),
+        )
         for processor in self.post_processors:
             hits = processor.apply(hits, filters)
         return [to_product_card(hit, query, public_base_url=self.public_base_url) for hit in hits[:top_k]]

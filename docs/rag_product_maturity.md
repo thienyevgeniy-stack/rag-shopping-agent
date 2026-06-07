@@ -43,6 +43,7 @@
    - `product_type` 作为 facet/filter 使用，先约束“鞋/裤/手机”等硬类目，再让向量或关键词召回处理偏好词，避免同大类商品互相污染。
    - taxonomy 支持 `compound_aliases`，例如 `["跑步", "鞋"]` 可覆盖“适合跑步的鞋”这类自然表达。
    - 同一 facet 内多个 `product_type` 按 OR 处理，例如“运动鞋或运动裤”会返回鞋或裤；不同过滤维度之间仍按 AND 收紧。
+   - 会话状态有 product scope 生命周期：当用户显式切换到新的 `product_type` 时，旧品类、旧关键词、旧预算和旧排除条件会清理；没有新 `product_type` 的追问继续沿用上下文。
 
 5. **Grounded 生成**
    - LLM 只基于候选商品生成回答。
@@ -95,6 +96,10 @@ Android App
 
 1. **Retrieval Quality**
    - 真实 embedding 灌库回归。
+   - `VectorStore.query` 接收结构化 `VectorSearchFilters`；本地 JSON fallback 先按商品类型倒排索引缩小候选，再用缓存的 token/title 特征打分。
+   - Chroma metadata 写入 `product_type` 布尔标记和价格字段，查询时可用 `where` 下推硬过滤；collection 名包含索引 schema 版本，避免旧索引和新 metadata 规则混用。
+   - `scripts/benchmark_retrieval.py` 可生成合成 1k/10k/50k/100k 商品库，支持 local/Chroma 两种 store，输出 P50/P95/平均延迟、卡片数量、合成数据耗时和建库耗时。
+   - 当前基准记录见 `docs/retrieval_benchmark_2026-06-07.md`：本地 fallback 50k 查询约 16-130ms，但建索引约 72 秒；Chroma 1k 查询约 33-178ms，后续应在真实 embedding + 持久化 Chroma 上扩展到 10k/50k。
    - 加入 rerank 层，解决 Top-K 只靠初始召回的问题。
    - 针对商品类型、类目、品牌、价格、功效词做混合检索；商品类型继续按 taxonomy/facet 维护，不写进分散业务分支。
    - 为 taxonomy 增加版本号和索引重灌提醒，避免线上商品元数据与过滤规则漂移。
@@ -108,6 +113,7 @@ Android App
    - 扩充 `data/eval_queries.jsonl`，覆盖更多类目、失败场景和长链多轮。
    - 输出 query success rate、cart action accuracy、grounding consistency。
    - 增加 LLM-as-judge 或 RAGAS 指标作为人工回归之外的辅助信号。
+   - 将跨品类切换、旧过滤条件清理和澄清恢复作为长期回归项。
 
 4. **Product Experience**
    - 增加商品详情页更完整信息。

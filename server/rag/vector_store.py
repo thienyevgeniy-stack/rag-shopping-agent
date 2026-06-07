@@ -1,14 +1,24 @@
+import heapq
 import json
 import re
 import hashlib
 import math
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Iterable
 from typing import Any, Protocol
 
 import httpx
 
-from server.rag.taxonomy import enrich_product_type_metadata, infer_product_type_ids, product_type_display_names
+from server.rag.taxonomy import (
+    canonicalize_product_type,
+    enrich_product_type_metadata,
+    infer_product_type_ids,
+    product_type_display_names,
+)
+
+
+INDEX_SCHEMA_VERSION = "v2_metadata_filters"
 
 
 @dataclass(frozen=True)
@@ -18,11 +28,24 @@ class VectorDocument:
     metadata: dict
 
 
+@dataclass(frozen=True)
+class DocumentFeatures:
+    haystack: str
+    title_text: str
+    tokens: frozenset[str]
+
+
+@dataclass(frozen=True)
+class VectorSearchFilters:
+    max_price: float | None = None
+    product_types: tuple[str, ...] = ()
+
+
 class VectorStore(Protocol):
     def add(self, documents: list[VectorDocument]) -> None:
         ...
 
-    def query(self, query: str, top_k: int = 5) -> list[dict]:
+    def query(self, query: str, top_k: int = 5, filters: VectorSearchFilters | None = None) -> list[dict]:
         ...
 
     def delete(self, ids: list[str]) -> None:
@@ -33,24 +56,56 @@ class LocalJsonVectorStore:
     def __init__(self, data_path: Path) -> None:
         self.data_path = data_path
         self.documents = load_product_documents(data_path)
+        self.product_type_index = build_product_type_index(self.documents)
+        self.document_features = build_document_feature_index(self.documents)
+
+    @classmethod
+    def from_documents(cls, documents: list[VectorDocument]) -> "LocalJsonVectorStore":
+        store = cls.__new__(cls)
+        store.data_path = None
+        store.documents = list(documents)
+        store.product_type_index = build_product_type_index(store.documents)
+        store.document_features = build_document_feature_index(store.documents)
+        return store
 
     def add(self, documents: list[VectorDocument]) -> None:
         self.documents.extend(documents)
+        for document in documents:
+            for product_type in infer_product_type_ids(document.metadata):
+                self.product_type_index.setdefault(product_type, []).append(document)
+            self.document_features[document.id] = build_document_features(document)
 
-    def query(self, query: str, top_k: int = 5) -> list[dict]:
+    def query(self, query: str, top_k: int = 5, filters: VectorSearchFilters | None = None) -> list[dict]:
         query_tokens = tokenize(query)
         hits: list[dict] = []
-        for doc in self.documents:
-            score = score_document(query_tokens, doc)
+        for doc in self.candidate_documents(filters):
+            if not metadata_matches_vector_filters(doc.metadata, filters):
+                continue
+            score = score_document_features(query_tokens, self.document_features[doc.id])
             if score > 0:
                 hits.append({"id": doc.id, "text": doc.text, "metadata": doc.metadata, "score": score})
 
-        hits.sort(key=lambda item: item["score"], reverse=True)
-        return hits[:top_k]
+        return heapq.nlargest(top_k, hits, key=lambda item: item["score"])
 
     def delete(self, ids: list[str]) -> None:
         id_set = set(ids)
         self.documents = [doc for doc in self.documents if doc.id not in id_set]
+        self.product_type_index = build_product_type_index(self.documents)
+        self.document_features = build_document_feature_index(self.documents)
+
+    def candidate_documents(self, filters: VectorSearchFilters | None) -> Iterable[VectorDocument]:
+        if not filters or not filters.product_types:
+            yield from self.documents
+            return
+
+        seen: set[str] = set()
+        for product_type in filters.product_types:
+            canonical = canonicalize_product_type(product_type)
+            for document in self.product_type_index.get(canonical, []):
+                if document.id in seen:
+                    continue
+                seen.add(document.id)
+                yield document
 
 
 class ChromaStore:
@@ -89,15 +144,22 @@ class ChromaStore:
             metadatas=[to_chroma_metadata(document.metadata) for document in documents],
         )
 
-    def query(self, query: str, top_k: int = 5) -> list[dict]:
+    def query(self, query: str, top_k: int = 5, filters: VectorSearchFilters | None = None) -> list[dict]:
         if self.count() == 0:
             return []
 
         candidate_count = min(self.count(), max(top_k * 10, 50))
+        where = build_chroma_where(filters)
+        query_kwargs: dict[str, Any] = {
+            "query_texts": [query],
+            "n_results": candidate_count,
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if where:
+            query_kwargs["where"] = where
+
         result = self.collection.query(
-            query_texts=[query],
-            n_results=candidate_count,
-            include=["documents", "metadatas", "distances"],
+            **query_kwargs,
         )
         ids = result.get("ids", [[]])[0]
         texts = result.get("documents", [[]])[0]
@@ -227,6 +289,7 @@ def build_chroma_embedding_function(
     batch_size: int,
     collection_name: str,
 ) -> tuple[Any, str]:
+    collection_name = f"{collection_name}_{INDEX_SCHEMA_VERSION}"
     if use_ark_embedding and api_key:
         embedder = ArkEmbeddingFunction(
             api_key=api_key,
@@ -241,6 +304,82 @@ def build_chroma_embedding_function(
 
 def safe_identifier(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]+", "_", value).strip("_").lower()
+
+
+def product_type_filter_key(product_type: str) -> str:
+    return f"pt_{safe_identifier(canonicalize_product_type(product_type))}"
+
+
+def build_product_type_index(documents: list[VectorDocument]) -> dict[str, list[VectorDocument]]:
+    index: dict[str, list[VectorDocument]] = {}
+    for document in documents:
+        for product_type in infer_product_type_ids(document.metadata):
+            index.setdefault(product_type, []).append(document)
+    return index
+
+
+def build_document_feature_index(documents: list[VectorDocument]) -> dict[str, DocumentFeatures]:
+    return {document.id: build_document_features(document) for document in documents}
+
+
+def build_document_features(document: VectorDocument) -> DocumentFeatures:
+    haystack = document.text.lower()
+    title_text = " ".join(
+        [
+            str(document.metadata.get("name", "")),
+            str(document.metadata.get("category", "")),
+            str(document.metadata.get("sub_category", "")),
+            str(document.metadata.get("brand", "")),
+            " ".join(product_type_display_names(document.metadata.get("product_types", []))),
+            " ".join(str(tag) for tag in document.metadata.get("tags", [])[:12]),
+        ]
+    ).lower()
+    return DocumentFeatures(
+        haystack=haystack,
+        title_text=title_text,
+        tokens=frozenset(tokenize(haystack)),
+    )
+
+
+def metadata_matches_vector_filters(metadata: dict[str, Any], filters: VectorSearchFilters | None) -> bool:
+    if filters is None:
+        return True
+
+    if filters.max_price is not None and float(metadata.get("price", 0)) > filters.max_price:
+        return False
+
+    if filters.product_types:
+        metadata_types = set(infer_product_type_ids(metadata))
+        expected = {canonicalize_product_type(product_type) for product_type in filters.product_types}
+        if not metadata_types & expected:
+            return False
+
+    return True
+
+
+def build_chroma_where(filters: VectorSearchFilters | None) -> dict[str, Any] | None:
+    if filters is None:
+        return None
+
+    clauses: list[dict[str, Any]] = []
+    if filters.max_price is not None:
+        clauses.append({"price": {"$lte": float(filters.max_price)}})
+
+    if filters.product_types:
+        product_type_clauses = [
+            {product_type_filter_key(product_type): True}
+            for product_type in filters.product_types
+        ]
+        if len(product_type_clauses) == 1:
+            clauses.append(product_type_clauses[0])
+        elif product_type_clauses:
+            clauses.append({"$or": product_type_clauses})
+
+    if not clauses:
+        return None
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"$and": clauses}
 
 
 def tokenize(text: str) -> set[str]:
@@ -289,7 +428,7 @@ def load_product_documents(data_path: Path) -> list[VectorDocument]:
 
 
 def to_chroma_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
-    return {
+    payload = {
         "id": metadata["id"],
         "name": metadata["name"],
         "category": metadata.get("category", ""),
@@ -302,6 +441,9 @@ def to_chroma_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         "detail_url": metadata.get("detail_url", ""),
         "metadata_json": json.dumps(metadata, ensure_ascii=False),
     }
+    for product_type in metadata.get("product_types", []):
+        payload[product_type_filter_key(str(product_type))] = True
+    return payload
 
 
 def from_chroma_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
@@ -328,21 +470,13 @@ def hashing_embedding(text: str, dimensions: int = 384) -> list[float]:
 
 
 def score_document(query_tokens: set[str], doc: VectorDocument) -> float:
-    haystack = doc.text.lower()
-    title_text = " ".join(
-        [
-            str(doc.metadata.get("name", "")),
-            str(doc.metadata.get("category", "")),
-            str(doc.metadata.get("sub_category", "")),
-            str(doc.metadata.get("brand", "")),
-            " ".join(product_type_display_names(doc.metadata.get("product_types", []))),
-            " ".join(str(tag) for tag in doc.metadata.get("tags", [])[:12]),
-        ]
-    ).lower()
-    doc_tokens = tokenize(haystack)
-    overlap = len(query_tokens & doc_tokens)
-    phrase_bonus = sum(2 for token in query_tokens if len(token) > 1 and token in haystack)
-    title_bonus = sum(6 for token in query_tokens if len(token) > 1 and token in title_text)
+    return score_document_features(query_tokens, build_document_features(doc))
+
+
+def score_document_features(query_tokens: set[str], features: DocumentFeatures) -> float:
+    overlap = len(query_tokens & features.tokens)
+    phrase_bonus = sum(2 for token in query_tokens if len(token) > 1 and token in features.haystack)
+    title_bonus = sum(6 for token in query_tokens if len(token) > 1 and token in features.title_text)
     return float(overlap + phrase_bonus + title_bonus)
 
 

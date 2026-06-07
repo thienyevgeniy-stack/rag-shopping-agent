@@ -116,6 +116,23 @@ def test_orchestrator_asks_clarification_for_vague_phone_request() -> None:
     assert done["data"]["pending_subject"] == "手机"
 
 
+def test_orchestrator_resets_filters_when_user_switches_product_scope() -> None:
+    orchestrator = make_orchestrator(cards=[PRODUCT_CARD], llm_client=None)
+
+    collect_events(orchestrator, "推荐一款保湿眼霜，预算250以内")
+    events = collect_events(orchestrator, "推荐一款手机")
+
+    assert "你更看重拍照、续航、性能还是性价比" in token_text(events)
+    assert not any(item["event"] == "product_card" for item in events)
+    done = [item for item in events if item["event"] == "done"][-1]
+    filters = {(item["kind"], item["value"]) for item in done["data"]["filters"]}
+    assert done["data"]["needs_clarification"] is True
+    assert ("product_type", "electronics.phone") in filters
+    assert ("product_type", "beauty.eye_cream") not in filters
+    assert ("keyword", "眼霜") not in filters
+    assert ("max_price", "250") not in filters
+
+
 def test_orchestrator_emits_comparison_card_for_compare_intent() -> None:
     other_card = {
         **PRODUCT_CARD,
