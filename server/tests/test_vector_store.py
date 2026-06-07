@@ -38,6 +38,15 @@ def test_chroma_store_round_trip(tmp_path: Path) -> None:
     assert any(hit["metadata"]["id"] == "p_beauty_021" for hit in hits)
 
 
+def test_product_documents_include_normalized_product_types() -> None:
+    documents = load_product_documents(ROOT_DIR / "data" / "products_ref.json")
+    by_id = {document.id: document.metadata for document in documents}
+
+    assert "clothes.sports_shoes" in by_id["p_clothes_007"]["product_types"]
+    assert "clothes.sports_shoes" not in by_id["p_clothes_004"]["product_types"]
+    assert "clothes.sports_pants" in by_id["p_clothes_004"]["product_types"]
+
+
 def test_parse_embedding_response_orders_vectors_by_index() -> None:
     payload = {
         "data": [

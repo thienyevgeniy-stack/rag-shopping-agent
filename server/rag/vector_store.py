@@ -8,6 +8,8 @@ from typing import Any, Protocol
 
 import httpx
 
+from server.rag.taxonomy import enrich_product_type_metadata, infer_product_type_ids, product_type_display_names
+
 
 @dataclass(frozen=True)
 class VectorDocument:
@@ -261,9 +263,11 @@ def load_product_documents(data_path: Path) -> list[VectorDocument]:
     for item in products:
         tags = " ".join(str(tag) for tag in item.get("tags", []))
         attributes = json.dumps(item.get("attributes", {}), ensure_ascii=False)
+        product_types = infer_product_type_ids(item)
+        product_type_names = product_type_display_names(product_types)
         text = (
             f"{item['name']} {item['category']} {item.get('sub_category', '')} "
-            f"{item['brand']} {tags} {attributes} {item.get('description', '')}"
+            f"{item['brand']} {' '.join(product_type_names)} {tags} {attributes} {item.get('description', '')}"
         )
         metadata = {
             "id": item["id"],
@@ -271,6 +275,7 @@ def load_product_documents(data_path: Path) -> list[VectorDocument]:
             "category": item["category"],
             "sub_category": item.get("sub_category", ""),
             "brand": item["brand"],
+            "product_types": product_types,
             "price": item["price"],
             "stock": item.get("stock", 0),
             "image_url": item.get("image_url", ""),
@@ -290,6 +295,7 @@ def to_chroma_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         "category": metadata.get("category", ""),
         "sub_category": metadata.get("sub_category", ""),
         "brand": metadata.get("brand", ""),
+        "product_type_ids": ",".join(str(item) for item in metadata.get("product_types", [])),
         "price": float(metadata.get("price", 0)),
         "stock": int(metadata.get("stock", 0)),
         "image_url": metadata.get("image_url", ""),
@@ -301,8 +307,8 @@ def to_chroma_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
 def from_chroma_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     raw = metadata.get("metadata_json")
     if raw:
-        return json.loads(raw)
-    return metadata
+        return enrich_product_type_metadata(json.loads(raw))
+    return enrich_product_type_metadata(metadata)
 
 
 def hashing_embedding(text: str, dimensions: int = 384) -> list[float]:
@@ -329,6 +335,7 @@ def score_document(query_tokens: set[str], doc: VectorDocument) -> float:
             str(doc.metadata.get("category", "")),
             str(doc.metadata.get("sub_category", "")),
             str(doc.metadata.get("brand", "")),
+            " ".join(product_type_display_names(doc.metadata.get("product_types", []))),
             " ".join(str(tag) for tag in doc.metadata.get("tags", [])[:12]),
         ]
     ).lower()

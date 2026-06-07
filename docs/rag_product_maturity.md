@@ -1,6 +1,6 @@
 # RAG 产品成熟化设计
 
-更新时间：2026-06-06
+更新时间：2026-06-07
 
 本项目不只按课题 PDF 的最小链路推进，而是参考成熟 RAG / Agent 系统的共性做法，逐步把 Demo 改造成可持续扩展的产品架构。
 
@@ -12,6 +12,8 @@
 - LlamaIndex Query Transformations：复杂用户问题需要查询改写、分解或转换，再进入检索。参考：https://developers.llamaindex.ai/python/framework/optimizing/advanced_retrieval/query_transformations/
 - OpenAI Structured Outputs：让模型输出符合 JSON Schema 的结构化结果，比让模型直接自由决定业务动作更可靠。参考：https://platform.openai.com/docs/guides/structured-outputs
 - RAGAS：成熟 RAG 需要可评估指标，例如 faithfulness、answer relevancy、context precision/recall 等。参考：https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/
+- RAGFlow / Dify：成熟 RAG 产品普遍把 ingestion、retrieval、agent workflow、observability 拆成可独立演进的模块，而不是只靠一个 prompt。参考：https://github.com/infiniflow/ragflow 、https://github.com/langgenius/dify
+- Algolia / Typesense 电商搜索：商品类目、品牌、价格等应建成 facet/filter 元数据，让用户查询先落到稳定属性，再做召回和排序。参考：https://www.algolia.com/doc/guides/managing-results/refine-results/faceting 、https://typesense.org/docs/28.0/api/search.html#facet-results
 
 ## 本项目采用的原则
 
@@ -37,6 +39,10 @@
    - 宽泛需求先澄清。
    - 澄清后的下一轮会补回 pending subject。
    - 多轮上下文会转换成明确过滤条件，如 max_price、keyword、exclude。
+   - 商品类型走可配置 taxonomy：`data/product_taxonomy.json` 维护标准 `product_type`、别名和匹配字段，检索文档加载时会把类型写入元数据。
+   - `product_type` 作为 facet/filter 使用，先约束“鞋/裤/手机”等硬类目，再让向量或关键词召回处理偏好词，避免同大类商品互相污染。
+   - taxonomy 支持 `compound_aliases`，例如 `["跑步", "鞋"]` 可覆盖“适合跑步的鞋”这类自然表达。
+   - 同一 facet 内多个 `product_type` 按 OR 处理，例如“运动鞋或运动裤”会返回鞋或裤；不同过滤维度之间仍按 AND 收紧。
 
 5. **Grounded 生成**
    - LLM 只基于候选商品生成回答。
@@ -46,7 +52,8 @@
 6. **可评估可回归**
    - 每次能力增强都加入 pytest 场景。
    - 当前测试覆盖澄清、对比、购物车、上下文追问、语义 planner、LLM fallback 和 API SSE。
-   - 下一阶段应增加一组离线 benchmark，按 RAGAS 风格记录命中率、相关性和事实一致性。
+   - 当前已加入 `data/eval_queries.jsonl` 和 `scripts/evaluate_agent.py`，用于回归 handler、事件、商品 ID、购物车数量和过滤条件。
+   - 下一阶段可按 RAGAS 风格继续扩展 faithfulness、answer relevancy 和 context precision。
 
 ## 当前已落地
 
@@ -64,16 +71,33 @@ Android App
      -> ContextFollowUpHandler
      -> RecommendationHandler
   -> ToolRegistry
-  -> Search / Compare / Cart
+  -> Taxonomy filters / Search / Compare / Cart
   -> Grounded response + structured SSE events
+  -> Agent trace
+  -> Offline eval cases
 ```
+
+## 可观测与评估
+
+成熟 RAG 产品不能只依赖“看起来回答不错”。当前新增了两层质量闭环：
+
+1. **在线 trace**
+   - 每轮 `/chat` 后端会记录一条 `AgentTrace`。
+   - trace 包括 `SemanticPlan`、选中的 handler、query、filters、事件计数、商品 ID、购物车数量和耗时。
+   - 可通过 `/debug/traces` 和 `/debug/traces/{trace_id}` 查看。
+
+2. **离线评估**
+   - `data/eval_queries.jsonl` 保存多轮测试用例和期望结果。
+   - `python scripts/evaluate_agent.py` 会逐条执行本地 Agent，并检查 handler、事件、商品、文本和过滤条件是否命中。
+   - 这相当于轻量版产品质量看板，后续每次改 planner、检索或购物车，都可以先跑评估，避免能力回退。
 
 ## 下一阶段产品化路线
 
 1. **Retrieval Quality**
    - 真实 embedding 灌库回归。
    - 加入 rerank 层，解决 Top-K 只靠初始召回的问题。
-   - 针对类目、品牌、价格、功效词做混合检索。
+   - 针对商品类型、类目、品牌、价格、功效词做混合检索；商品类型继续按 taxonomy/facet 维护，不写进分散业务分支。
+   - 为 taxonomy 增加版本号和索引重灌提醒，避免线上商品元数据与过滤规则漂移。
 
 2. **Planner Quality**
    - 为 `SemanticPlanner` 增加 few-shot 示例。
@@ -81,9 +105,9 @@ Android App
    - 对低置信度 plan 主动澄清，而不是强行执行。
 
 3. **Evaluation**
-   - 建立 `data/eval_queries.jsonl`。
-   - 每条样例标注期望意图、期望商品、过滤条件和是否应澄清。
-   - 增加离线评估脚本，输出 query success rate、cart action accuracy、grounding consistency。
+   - 扩充 `data/eval_queries.jsonl`，覆盖更多类目、失败场景和长链多轮。
+   - 输出 query success rate、cart action accuracy、grounding consistency。
+   - 增加 LLM-as-judge 或 RAGAS 指标作为人工回归之外的辅助信号。
 
 4. **Product Experience**
    - 增加商品详情页更完整信息。

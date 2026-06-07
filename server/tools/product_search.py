@@ -1,7 +1,8 @@
 from pathlib import PurePosixPath
 from urllib.parse import quote, urlparse
 
-from server.rag.post_process import ExclusionFilter, KeywordFilter, RangeFilter, SearchFilters
+from server.rag.post_process import ExclusionFilter, KeywordFilter, ProductTypeFilter, RangeFilter, SearchFilters
+from server.rag.taxonomy import enrich_product_type_metadata, product_type_display_names
 from server.rag.vector_store import VectorStore
 
 
@@ -11,7 +12,7 @@ class ProductSearchTool:
     def __init__(self, store: VectorStore, public_base_url: str = "") -> None:
         self.store = store
         self.public_base_url = public_base_url
-        self.post_processors = [RangeFilter(), KeywordFilter(), ExclusionFilter()]
+        self.post_processors = [RangeFilter(), ProductTypeFilter(), KeywordFilter(), ExclusionFilter()]
 
     def run(self, query: str, filters: SearchFilters, top_k: int = 5) -> list[dict]:
         hits = self.store.query(query=query, top_k=max(top_k * 10, 50))
@@ -21,12 +22,14 @@ class ProductSearchTool:
 
 
 def to_product_card(hit: dict, query: str, public_base_url: str = "") -> dict:
-    metadata = hit["metadata"]
+    metadata = enrich_product_type_metadata(hit["metadata"])
     reason = build_reason(metadata, query)
     return {
         "id": metadata["id"],
         "name": metadata["name"],
         "category": metadata["category"],
+        "product_types": metadata.get("product_types", []),
+        "product_type_names": product_type_display_names(metadata.get("product_types", [])),
         "brand": metadata["brand"],
         "price": metadata["price"],
         "image_url": build_product_image_url(metadata.get("image_url", ""), public_base_url),

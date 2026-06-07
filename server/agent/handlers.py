@@ -29,6 +29,7 @@ class AgentTurnContext:
     session: SessionState
     registry: ToolRegistry
     llm_client: LLMClient | None
+    selected_handler: str = ""
 
 
 class AgentHandler(Protocol):
@@ -46,6 +47,7 @@ class AgentWorkflow:
     async def stream(self, context: AgentTurnContext) -> AsyncIterator[dict]:
         for handler in self.handlers:
             if handler.matches(context):
+                context.selected_handler = handler.__class__.__name__
                 async for item in handler.handle(context):
                     yield item
                 return

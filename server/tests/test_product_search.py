@@ -2,7 +2,7 @@ from pathlib import Path
 
 from server.rag.post_process import SearchFilters
 from server.rag.vector_store import LocalJsonVectorStore
-from server.tools.product_search import ProductSearchTool
+from server.tools.product_search import ProductSearchTool, to_product_card
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -51,3 +51,74 @@ def test_product_search_does_not_relax_required_keywords_to_unrelated_items() ->
     )
 
     assert cards == []
+
+
+def test_product_search_filters_sports_shoes_without_sports_pants() -> None:
+    tool = make_tool()
+
+    cards = tool.run(
+        query="推荐一款运动鞋",
+        filters=SearchFilters(product_types=["clothes.sports_shoes"]),
+        top_k=5,
+    )
+
+    assert cards
+    assert all("鞋" in card["name"] for card in cards)
+    assert not any("裤" in card["name"] for card in cards)
+    assert all("clothes.sports_shoes" in card["product_types"] for card in cards)
+
+
+def test_product_search_handles_compound_sports_shoe_expression() -> None:
+    tool = make_tool()
+
+    cards = tool.run(
+        query="推荐一款适合跑步的鞋",
+        filters=SearchFilters(product_types=["clothes.sports_shoes"]),
+        top_k=5,
+    )
+
+    assert cards
+    assert all("clothes.sports_shoes" in card["product_types"] for card in cards)
+    assert not any("裤" in card["name"] for card in cards)
+
+
+def test_product_type_filters_are_or_within_same_facet() -> None:
+    tool = make_tool()
+
+    cards = tool.run(
+        query="推荐运动鞋或运动裤",
+        filters=SearchFilters(product_types=["clothes.sports_shoes", "clothes.sports_pants"]),
+        top_k=10,
+    )
+    returned_types = {product_type for card in cards for product_type in card["product_types"]}
+
+    assert cards
+    assert "clothes.sports_shoes" in returned_types
+    assert "clothes.sports_pants" in returned_types
+    assert all(
+        set(card["product_types"]) & {"clothes.sports_shoes", "clothes.sports_pants"}
+        for card in cards
+    )
+
+
+def test_product_card_enriches_product_type_from_legacy_metadata() -> None:
+    card = to_product_card(
+        {
+            "metadata": {
+                "id": "legacy_shoe",
+                "name": "缓震跑步鞋",
+                "category": "服饰运动",
+                "sub_category": "运动鞋",
+                "brand": "Demo",
+                "price": 399,
+                "image_url": "",
+                "detail_url": "",
+                "tags": ["跑鞋"],
+                "description": "",
+            }
+        },
+        query="推荐一款运动鞋",
+    )
+
+    assert card["product_types"] == ["clothes.sports_shoes"]
+    assert card["product_type_names"] == ["运动鞋"]

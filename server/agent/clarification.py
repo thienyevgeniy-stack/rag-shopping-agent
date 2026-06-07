@@ -20,7 +20,7 @@ def get_clarification_subject(message: str, session) -> str:
     actionable_filters = [
         item
         for item in session.filters
-        if not (item.kind == "keyword" and item.value == subject)
+        if item.kind != "product_type" and not (item.kind == "keyword" and item.value == subject)
     ]
     has_actionable_detail = bool(actionable_filters or session.exclusions)
     if has_actionable_detail:

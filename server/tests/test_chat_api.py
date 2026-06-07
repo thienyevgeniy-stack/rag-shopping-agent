@@ -119,3 +119,48 @@ def test_chat_cart_update_after_product_recommendation() -> None:
     assert "event: cart_update" in second.text
     assert "科颜氏牛油果保湿眼霜" in second.text
     assert '"total_quantity": 1' in second.text
+
+
+def test_chat_sports_shoe_request_does_not_return_pants() -> None:
+    response = client.post(
+        "/chat",
+        json={
+            "session_id": "pytest-sports-shoes",
+            "message": "推荐一款运动鞋",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "event: product_card" in response.text
+    assert "跑鞋" in response.text or "跑步鞋" in response.text
+    assert "运动长裤" not in response.text
+    assert "运动短裤" not in response.text
+
+
+def test_debug_traces_capture_chat_turn() -> None:
+    session_id = "pytest-debug-trace"
+    response = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "科颜氏和AHC哪个眼霜更适合干皮",
+        },
+    )
+    traces = client.get(f"/debug/traces?session_id={session_id}")
+
+    assert response.status_code == 200
+    assert traces.status_code == 200
+    payload = traces.json()
+    assert payload
+    latest = payload[0]
+    assert latest["session_id"] == session_id
+    assert latest["handler"] == "CompareHandler"
+    assert latest["plan"]["intent"] == "compare"
+    assert "comparison_card" in latest["event_counts"]
+    assert latest["comparison_product_ids"]
+
+
+def test_debug_trace_detail_returns_404_for_missing_trace() -> None:
+    response = client.get("/debug/traces/missing-trace-id")
+
+    assert response.status_code == 404

@@ -29,7 +29,7 @@ event: token
 data: {"text":"根"}
 
 event: product_card
-data: {"id":"p001","name":"清爽控油氨基酸洗面奶","price":79,"image_url":"http://127.0.0.1:8000/assets/products/p001_live.jpg","detail_url":"http://127.0.0.1:8000/products/p001"}
+data: {"id":"p001","name":"清爽控油氨基酸洗面奶","price":79,"product_types":["beauty.cleansing_oil"],"image_url":"http://127.0.0.1:8000/assets/products/p001_live.jpg","detail_url":"http://127.0.0.1:8000/products/p001"}
 
 event: done
 data: {"session_id":"demo","filters":[],"exclusions":[],"needs_clarification":false,"pending_subject":""}
@@ -103,3 +103,45 @@ GET /products/p_beauty_021
 ```
 
 商品卡片中的 `detail_url` 会指向该页面。当前页面展示商品主图、名称、品牌、类目、价格、库存、标签、规格和商品说明。
+
+## 调试 Trace
+
+### `GET /debug/traces`
+
+返回最近的 Agent trace，用于排查每轮对话的语义规划、handler 分派、过滤条件和结构化事件。
+
+可选参数：
+
+| 参数 | 说明 |
+|---|---|
+| `session_id` | 只查看指定会话 |
+| `limit` | 返回条数，默认 20，最大 100 |
+
+示例：
+
+```text
+GET /debug/traces?session_id=demo&limit=5
+```
+
+返回字段包括：
+
+```json
+{
+  "trace_id": "8f1c...",
+  "session_id": "demo",
+  "message": "科颜氏和AHC哪个眼霜更适合干皮",
+  "handler": "CompareHandler",
+  "plan": {"intent": "compare", "filters": [{"kind": "keyword", "value": "保湿"}]},
+  "query": "科颜氏和AHC哪个眼霜更适合干皮 保湿",
+  "filters": {"max_price": null, "keywords": ["眼霜", "保湿"], "product_types": ["beauty.eye_cream"], "exclusions": []},
+  "event_counts": {"token": 120, "product_card": 2, "comparison_card": 1, "done": 1},
+  "product_ids": ["p_beauty_021", "p_beauty_016"],
+  "comparison_product_ids": ["p_beauty_021", "p_beauty_016"],
+  "cart_total_quantity": null,
+  "duration_ms": 1300.5
+}
+```
+
+### `GET /debug/traces/{trace_id}`
+
+返回单条 trace。找不到时返回 404。

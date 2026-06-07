@@ -1,6 +1,6 @@
 # 项目进度
 
-更新时间：2026-06-06
+更新时间：2026-06-07
 
 ## 已完成
 
@@ -60,6 +60,11 @@
 - [x] 外部 RAG/Agent 成熟化参考梳理：新增 `docs/rag_product_maturity.md`
 - [x] 新增 `SemanticPlanner`：规则 fallback 默认启用，`USE_SEMANTIC_LLM=true` 时支持 LLM JSON plan + Pydantic 校验
 - [x] 上下文泛化增强：支持品牌/名称引用、隐式加购数量、候选商品排除、参考价格继续检索
+- [x] Agent trace：每轮记录 plan、handler、query、filters、事件计数、商品 ID、购物车数量和耗时
+- [x] 调试接口：`GET /debug/traces` 和 `GET /debug/traces/{trace_id}`
+- [x] 离线评估集和脚本：`data/eval_queries.jsonl`、`python scripts/evaluate_agent.py`
+- [x] 商品 taxonomy/facet 过滤：`data/product_taxonomy.json` 维护标准 `product_type`，支持别名和组合触发词，检索文档加载时写入类型元数据，`运动鞋/跑鞋/跑步鞋/跑步的鞋` 不再混入运动裤、短裤等同大类商品
+- [x] 同 facet 多选 OR：`运动鞋或运动裤` 会返回鞋或裤，不要求一个商品同时满足两个类型
 
 ## 已验证
 
@@ -88,6 +93,9 @@
 - [x] Android Kotlin 编译验证：`:app:compileDebugKotlin`
 - [x] AgentWorkflow 关键回归：澄清、LLM fallback、商品对比、上下文追问和购物车测试通过
 - [x] SemanticPlanner 回归：`AHC 那个`、`那支来两件`、`科颜氏先不要了`、`比第二款更适合敏感肌但别太贵` 测试通过
+- [x] Trace API 回归：`/debug/traces` 可返回最近一次 handler、plan 和结构化事件摘要
+- [x] 运动鞋回归：`推荐一款运动鞋` 触发 `clothes.sports_shoes` 类型过滤，只返回鞋类商品，不返回运动裤
+- [x] 离线评估回归：当前 `data/eval_queries.jsonl` 10/10 turns 通过
 
 ## 当前状态
 
@@ -102,6 +110,7 @@ Android 真机 App
   -> AgentWorkflow
   -> JSON/Chroma 商品检索
   -> Doubao-Seed grounded answer
+  -> Agent trace / offline eval
   -> 流式 token + product_card + comparison_card + cart_update
   -> 手机端展示商品主图卡片、对比面板、购物车面板和详情弹窗
 ```
@@ -118,7 +127,9 @@ Android 真机 App
 ## 下一步
 
 1. 按需打开 `USE_ARK_EMBEDDING=true` 做一次真实 embedding 灌库回归。
-2. 继续完善多轮查询改写，覆盖更多类目和偏好组合。
-3. 从多模态、真实 embedding 灌库回归或 Demo 录屏中选择 1 个方向深入实现。
-4. 做 Demo 脚本和答辩截图/录屏材料。
-5. 后续如有真实商品落地页，再替换当前本地模拟页 URL。
+2. 继续完善 taxonomy 覆盖面，把更多商品类型、品牌和功效词沉淀为可配置元数据，并为 taxonomy 变更建立索引重灌/回归提醒。
+3. 继续完善多轮查询改写，覆盖更多类目和偏好组合。
+4. 扩充离线评估集，覆盖更多类目、失败样例、长链多轮和购物车边界条件。
+5. 从 rerank、多模态、真实 embedding 灌库回归或 Demo 录屏中选择 1 个方向深入实现。
+5. 做 Demo 脚本和答辩截图/录屏材料。
+6. 后续如有真实商品落地页，再替换当前本地模拟页 URL。

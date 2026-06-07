@@ -1,11 +1,15 @@
 import argparse
 import json
+import sys
 import zipfile
 from pathlib import Path
 from typing import Any
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT_DIR))
+
+from server.rag.taxonomy import infer_product_type_ids  # noqa: E402
 
 
 def normalize_product(raw: dict[str, Any]) -> dict[str, Any]:
@@ -50,7 +54,7 @@ def normalize_product(raw: dict[str, Any]) -> dict[str, Any]:
         *sku_summaries[:10],
     ]
 
-    return {
+    product = {
         "id": raw["product_id"],
         "name": raw["title"],
         "category": raw.get("category", ""),
@@ -72,6 +76,8 @@ def normalize_product(raw: dict[str, Any]) -> dict[str, Any]:
         },
         "description": description,
     }
+    product["product_types"] = infer_product_type_ids(product)
+    return product
 
 
 def convert(zip_path: Path, output_path: Path) -> list[dict[str, Any]]:

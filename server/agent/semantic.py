@@ -8,13 +8,14 @@ from pydantic import BaseModel, Field, ValidationError
 from server.agent.context import extract_referenced_index, select_contextual_product
 from server.agent.filters import extract_filters
 from server.agent.intent import UserIntent, detect_intent
+from server.rag.taxonomy import extract_product_type_matches
 from server.session.state import FilterCondition, SessionState
 
 
 SemanticIntent = Literal["recommend", "compare", "cart", "ask_product_detail", "clarify", "browse"]
 CartAction = Literal["none", "add", "remove", "update_quantity", "view", "checkout"]
 ReferenceType = Literal["none", "last", "ordinal", "name", "brand", "cheapest"]
-FilterKind = Literal["keyword", "max_price", "exclude"]
+FilterKind = Literal["keyword", "max_price", "exclude", "product_type"]
 
 
 class ChatMessageClient(Protocol):
@@ -127,7 +128,7 @@ def build_semantic_plan_messages(message: str, session: SessionState) -> list[di
         "reference_text": "brand/product hint such as AHC or 科颜氏",
         "quantity": "integer or null",
         "query": "search query in Chinese, include category and preferences",
-        "filters": [{"kind": "keyword|max_price|exclude", "value": "string"}],
+        "filters": [{"kind": "keyword|max_price|exclude|product_type", "value": "string"}],
         "needs_search": "boolean",
         "confidence": "0-1",
     }
@@ -168,6 +169,9 @@ def build_candidate_context(cards: list[dict]) -> str:
 
 def build_semantic_filters(message: str, session: SessionState) -> list[SemanticFilter]:
     filters: list[SemanticFilter] = []
+    for match in extract_product_type_matches(message):
+        filters.append(SemanticFilter(kind="product_type", value=match.product_type_id))
+
     keyword_aliases = {
         "干皮": "保湿",
         "补水": "保湿",

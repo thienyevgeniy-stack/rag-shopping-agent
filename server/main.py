@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from server.api.chat import router as chat_router
+from server.api.debug import router as debug_router
 from server.api.products import router as products_router
 from server.config import get_settings
 
@@ -21,6 +22,7 @@ app.add_middleware(
 
 app.include_router(chat_router)
 app.include_router(products_router)
+app.include_router(debug_router)
 settings.product_image_path.mkdir(parents=True, exist_ok=True)
 app.mount(
     "/assets/products",

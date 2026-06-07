@@ -1,10 +1,14 @@
 import re
 
+from server.rag.taxonomy import extract_product_type_matches
 from server.session.state import FilterCondition
 
 
 def extract_filters(message: str) -> list[FilterCondition]:
     filters: list[FilterCondition] = []
+
+    for match in extract_product_type_matches(message):
+        filters.append(FilterCondition(kind="product_type", value=match.product_type_id))
 
     max_price_values: list[str] = []
     for pattern in [
@@ -30,7 +34,6 @@ def extract_filters(message: str) -> list[FilterCondition]:
     for keyword in [
         "眼霜",
         "卸妆油",
-        "跑鞋",
         "咖啡",
         "蓝牙耳机",
         "耳机",

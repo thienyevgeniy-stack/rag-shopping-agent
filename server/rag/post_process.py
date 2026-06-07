@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from server.rag.taxonomy import product_type_matches
 from server.session.state import SessionState
 
 
@@ -20,12 +21,14 @@ KEYWORD_SYNONYMS: dict[str, tuple[str, ...]] = {
 class SearchFilters:
     max_price: float | None = None
     keywords: list[str] = field(default_factory=list)
+    product_types: list[str] = field(default_factory=list)
     exclusions: list[str] = field(default_factory=list)
 
     @classmethod
     def from_session(cls, session: SessionState) -> "SearchFilters":
         max_price: float | None = None
         keywords: list[str] = []
+        product_types: list[str] = []
         exclusions: list[str] = []
 
         for item in session.filters:
@@ -33,11 +36,14 @@ class SearchFilters:
                 max_price = float(item.value)
             elif item.kind == "keyword":
                 keywords.append(item.value)
+            elif item.kind == "product_type":
+                if item.value not in product_types:
+                    product_types.append(item.value)
 
         for item in session.exclusions:
             exclusions.append(item.value)
 
-        return cls(max_price=max_price, keywords=keywords, exclusions=exclusions)
+        return cls(max_price=max_price, keywords=keywords, product_types=product_types, exclusions=exclusions)
 
 
 class PostProcessor(Protocol):
@@ -76,6 +82,17 @@ class ExclusionFilter:
         return kept
 
 
+class ProductTypeFilter:
+    def apply(self, hits: list[dict], filters: SearchFilters) -> list[dict]:
+        if not filters.product_types:
+            return hits
+        return [
+            hit
+            for hit in hits
+            if any(product_type_matches(product_type, hit["metadata"]) for product_type in filters.product_types)
+        ]
+
+
 class KeywordFilter:
     def apply(self, hits: list[dict], filters: SearchFilters) -> list[dict]:
         if not filters.keywords:
@@ -88,7 +105,7 @@ class KeywordFilter:
         filtered: list[dict] = []
         for hit in hits:
             metadata = hit["metadata"]
-            haystack = " ".join(
+            broad_haystack = " ".join(
                 [
                     str(metadata.get("name", "")),
                     str(metadata.get("category", "")),
@@ -98,12 +115,12 @@ class KeywordFilter:
                     str(metadata.get("description", "")),
                 ]
             ).lower()
-            if all(keyword_matches(keyword, haystack) for keyword in required):
+            if all(keyword_matches(keyword, broad_haystack) for keyword in required):
                 filtered.append(hit)
 
         return filtered
 
 
-def keyword_matches(keyword: str, haystack: str) -> bool:
+def keyword_matches(keyword: str, broad_haystack: str) -> bool:
     variants = KEYWORD_SYNONYMS.get(keyword, (keyword,))
-    return any(variant in haystack for variant in variants)
+    return any(variant in broad_haystack for variant in variants)

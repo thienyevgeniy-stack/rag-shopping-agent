@@ -1,0 +1,61 @@
+{
+  "version": "2026-06-07",
+  "product_types": [
+    {
+      "id": "beauty.eye_cream",
+      "display_name": "眼霜",
+      "aliases": ["眼霜", "眼部精华", "眼周护理"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "beauty.cleansing_oil",
+      "display_name": "卸妆油",
+      "aliases": ["卸妆油", "卸妆"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "beauty.sunscreen",
+      "display_name": "防晒",
+      "aliases": ["防晒", "防晒霜", "防晒乳"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "beauty.face_cream",
+      "display_name": "面霜",
+      "aliases": ["面霜", "乳霜", "保湿霜"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "clothes.sports_shoes",
+      "display_name": "运动鞋",
+      "aliases": ["运动鞋", "跑鞋", "跑步鞋", "训练鞋", "竞速跑鞋", "篮球鞋"],
+      "compound_aliases": [["跑步", "鞋"], ["训练", "鞋"], ["马拉松", "鞋"], ["篮球", "鞋"], ["缓震", "鞋"]],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "clothes.sports_pants",
+      "display_name": "运动裤",
+      "aliases": ["运动裤", "运动长裤", "运动短裤", "训练裤", "束脚裤", "收口裤"],
+      "compound_aliases": [["运动", "裤"], ["训练", "裤"], ["跑步", "裤"], ["束脚", "裤"], ["收口", "裤"]],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "electronics.phone",
+      "display_name": "手机",
+      "aliases": ["手机", "智能手机"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "electronics.headphones",
+      "display_name": "耳机",
+      "aliases": ["耳机", "蓝牙耳机", "无线耳机"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "food.coffee",
+      "display_name": "咖啡",
+      "aliases": ["咖啡", "咖啡豆", "挂耳咖啡", "冷萃"],
+      "match_fields": ["name", "sub_category", "tags"]
+    }
+  ]
+}

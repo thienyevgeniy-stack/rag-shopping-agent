@@ -1,11 +1,13 @@
 from collections.abc import AsyncIterator
 from functools import lru_cache
+import time
 
 from server.agent.context import extract_contextual_filters
 from server.agent.filters import extract_filters
 from server.agent.handlers import AgentTurnContext, AgentWorkflow, build_default_workflow
 from server.agent.query_rewriter import rewrite_query
 from server.agent.semantic import SemanticPlanner
+from server.agent.tracing import InMemoryTraceStore, build_trace
 from server.config import get_settings
 from server.inputs.processors import TextProcessor
 from server.llm.ark_client import ArkChatClient, LLMClient
@@ -31,12 +33,14 @@ class Orchestrator:
         llm_client: LLMClient | None = None,
         workflow: AgentWorkflow | None = None,
         semantic_planner: SemanticPlanner | None = None,
+        trace_store: InMemoryTraceStore | None = None,
     ) -> None:
         self.registry = registry
         self.sessions = sessions
         self.llm_client = llm_client
         self.workflow = workflow or build_default_workflow()
         self.semantic_planner = semantic_planner or SemanticPlanner()
+        self.trace_store = trace_store or InMemoryTraceStore()
         self.input_processor = TextProcessor()
 
     async def stream_chat(
@@ -44,6 +48,7 @@ class Orchestrator:
         session_id: str,
         user_message: str,
     ) -> AsyncIterator[dict]:
+        started_at = time.time()
         session = self.sessions.get(session_id)
         session.add_user_message(user_message)
 
@@ -69,8 +74,23 @@ class Orchestrator:
             llm_client=self.llm_client,
         )
 
+        emitted: list[dict] = []
         async for item in self.workflow.stream(context):
+            emitted.append(item)
             yield item
+
+        self.trace_store.add(
+            build_trace(
+                session_id=session_id,
+                message=processed.text,
+                handler=context.selected_handler,
+                plan=plan,
+                query=query,
+                filters=filters,
+                events=emitted,
+                started_at=started_at,
+            )
+        )
 
 
 @lru_cache
