@@ -7,7 +7,9 @@
 ```json
 {
   "status": "ok",
-  "env": "development"
+  "env": "development",
+  "debug_api_enabled": true,
+  "session_backend": "memory"
 }
 ```
 
@@ -18,9 +20,14 @@
 ```json
 {
   "session_id": "demo",
-  "message": "推荐一款适合油皮的洗面奶，预算100以内"
+  "message": "推荐一款适合油皮的洗面奶，预算100以内",
+  "image_base64": "",
+  "image_mime_type": "",
+  "image_filename": ""
 }
 ```
+
+`image_*` 字段可选。上传图片时，后端会先做商品主图相似匹配，再把图片线索并入同一条 RAG 链路。
 
 响应为 SSE：
 
@@ -44,6 +51,8 @@ data: {"session_id":"demo","filters":[],"exclusions":[],"needs_clarification":fa
 | `done` | 本轮结束 |
 | `cart_update` | 购物车状态变化 |
 | `comparison_card` | 多商品对比结构化结果 |
+| `image_analysis` | 图片找货的视觉摘要和相似商品匹配 |
+| `guardrail` | LLM 回答被后校验拦截或降级的审计事件 |
 
 `done` 事件中的 `needs_clarification=true` 表示本轮是主动澄清，不会返回商品卡片；`pending_subject` 会保留待补全的商品主题，例如“手机”。
 
@@ -76,6 +85,28 @@ data: {
 }
 ```
 
+图片请求会先返回 `image_analysis`，例如：
+
+```text
+event: image_analysis
+data: {
+  "summary": "上传图片最像商品“ Nike Air Zoom Pegasus 41 ...”，品牌 耐克，类目 服饰运动，商品类型 运动鞋，视觉相似度 1.00。",
+  "matches": [
+    {"id":"p_clothes_007","name":"Nike Air Zoom Pegasus 41 ...","similarity":1.0}
+  ]
+}
+```
+
+如果 LLM 回答触发防幻觉后校验，后端会返回 `guardrail`，随后流式输出安全降级后的 grounded 回答，例如：
+
+```text
+event: guardrail
+data: {
+  "action": "fallback",
+  "violations": ["unsupported_promotion_terms:优惠券", "unsupported_prices:99"]
+}
+```
+
 ## 静态资源
 
 ### `GET /assets/products/{filename}`
@@ -105,6 +136,8 @@ GET /products/p_beauty_021
 商品卡片中的 `detail_url` 会指向该页面。当前页面展示商品主图、名称、品牌、类目、价格、库存、标签、规格和商品说明。
 
 ## 调试 Trace
+
+`/debug` 接口仅用于开发和排查问题。`APP_ENV=production` 时默认不挂载；如需显式控制，可设置 `ENABLE_DEBUG_API=true|false`。生产环境不要对公网开放 trace，因为其中包含用户消息、语义计划、过滤条件和商品命中信息。
 
 ### `GET /debug/traces`
 

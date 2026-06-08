@@ -44,6 +44,7 @@
 - [x] Doubao/Ark LLM 客户端接入：`USE_LLM=true` 时基于 RAG 商品上下文生成回答
 - [x] LLM 调用失败或未配置 API Key 时自动回退本地模板回答
 - [x] 防幻觉 prompt：约束只基于候选商品回答，不编造价格、优惠、库存或功效
+- [x] `GroundingGuard` 回答后校验：LLM 输出先缓冲，拦截未提供的优惠/库存/销量、候选外价格、缺少候选引用和绝对化功效后降级为 grounded 模板回答
 - [x] 从参考集 zip 抽取 100 张商品主图到 `data/product_images`
 - [x] FastAPI 通过 `/assets/products/...` 提供商品主图静态资源
 - [x] 商品卡片返回完整 `detail_url`，支持跳转本地商品详情页
@@ -69,6 +70,17 @@
 - [x] 大库检索优化：`VectorStore.query` 支持 `VectorSearchFilters`，本地 JSON fallback 使用商品类型倒排索引、文档 token/title 特征缓存和 Top-K 堆选择，Chroma metadata 写入类型布尔标记并支持 `where` 下推
 - [x] 性能压测脚本：`python scripts\benchmark_retrieval.py --store local|chroma --sizes ... --runs ... --output ...`
 - [x] 性能压测报告：`docs/retrieval_benchmark_2026-06-07.md`
+- [x] 轻量多模态图片找货：Android 可选择图片，`/chat` 接收 base64 图片，后端基于商品主图视觉签名做同款/相似商品线索转换
+- [x] 场景化组合推荐：`ScenarioBundleHandler` 支持三亚度假、通勤、运动训练和通用组合方案，跨类目返回商品卡片
+- [x] 首 Token 优化与压测：推荐/组合链路先发即时 token，新增 `scripts/benchmark_first_token.py`
+- [x] 首 Token 压测报告：`docs/first_token_benchmark_2026-06-07.md`
+- [x] 生产配置隔离：`APP_ENV=production` 默认关闭 `/debug`，CORS 白名单、debug 开关、session/trace 容量通过环境变量配置
+- [x] 会话容量治理：内存 `SessionStore` 增加 TTL 和最大会话数，避免本地服务长时间运行时无限增长
+- [x] SQLite 会话持久化：`SESSION_BACKEND=sqlite` 时保存完整 `SessionState`，服务重启后可恢复购物车、候选商品和上下文
+- [x] Redis 会话后端：`SESSION_BACKEND=redis` 时通过 `SESSION_REDIS_URL` 共享会话和购物车状态，支持 TTL 和最大 session 数淘汰
+- [x] 后端模块瘦身：`handlers.py` 和 `inputs/processors.py` 收缩为兼容导出层，具体 handler、workflow、多模态和图片相似索引按职责拆分
+- [x] 语义规划模块瘦身：`semantic.py` 收缩为兼容导出层，schema、规则 fallback、LLM prompt/解析和 plan 合并按职责拆分
+- [x] Android UI 模块瘦身：`ChatScreen.kt` 收缩为页面容器，消息、输入栏、商品卡、购物车和对比面板拆成独立 Compose 文件
 
 ## 已验证
 
@@ -82,6 +94,7 @@
 - [x] 参考集查询验证：保湿眼霜可返回科颜氏/AHC 商品卡片
 - [x] PDF 典型多轮场景回归：跑鞋 -> 轻量 -> 预算 500 以内，无严格匹配时不返回食品等无关商品
 - [x] LLM mock 测试：正常流式生成、失败回退、无商品时跳过 LLM
+- [x] Guardrail 回归：LLM 编造优惠券或候选外价格时，不向端侧流出不安全回答，改发 `guardrail` 并降级
 - [x] Doubao-Seed 真实接口联调完成：`doubao-seed-2-0-lite-260215`
 - [x] 静态图片接口验证：`/assets/products/p_beauty_021_live.jpg`
 - [x] 商品详情页接口验证：`/products/p_beauty_021`
@@ -102,6 +115,9 @@
 - [x] 跨品类状态回归：眼霜推荐后再问手机，会清理旧眼霜/预算过滤并重新触发手机澄清
 - [x] 离线评估回归：当前 `data/eval_queries.jsonl` 12/12 turns 通过
 - [x] 检索压测冒烟：本地 fallback 合成 50k 商品库查询约 16-130ms，Chroma 合成 1k 商品库查询约 33-178ms，报告可输出为 JSON
+- [x] 多模态回归：上传参考商品主图可返回 `image_analysis` 和对应商品卡片
+- [x] 场景组合回归：三亚度假方案返回防晒、穿搭、出行等组合槽位和商品卡片
+- [x] 首 Token 回归：本地 8001 服务 4 个典型场景 P95 首 token 约 318-342ms，低于 1s 阈值
 
 ## 当前状态
 
@@ -112,13 +128,15 @@ Android 真机 App
   -> OkHttp SSE
   -> adb reverse
   -> FastAPI /chat
+  -> MultimodalInputProcessor
   -> SemanticPlanner
   -> AgentWorkflow
   -> JSON/Chroma 商品检索
   -> Doubao-Seed grounded answer
+  -> GroundingGuard
   -> Agent trace / offline eval
-  -> 流式 token + product_card + comparison_card + cart_update
-  -> 手机端展示商品主图卡片、对比面板、购物车面板和详情弹窗
+  -> 流式 token + image_analysis + guardrail + product_card + comparison_card + cart_update
+  -> 手机端展示商品主图卡片、对比面板、购物车面板、图片上传入口和详情弹窗
 ```
 
 ## 当前限制
@@ -129,8 +147,11 @@ Android 真机 App
 - [ ] Chroma metadata where 已完成 1k 冒烟压测；真实生产规模仍需对 Chroma + 真实 embedding + metadata where 做 10k/50k 端到端压测
 - [ ] 多轮对话已支持澄清主题补全、商品指代和轻量价格追问，但还不是完整长期记忆
 - [ ] 购物车已支持本地模拟闭环，但尚未接真实支付、地址或订单系统
-- [ ] 多模态仍是接口预留
+- [ ] 当前多模态是本地图片签名相似检索，适合 Demo；真实拍照找货仍需接 VLM/CLIP 类视觉语义模型
+- [ ] 首 Token 已有脚本和即时 token 优化；真实 LLM 开启后的首 Token 仍需在目标服务器上持续压测
+- [ ] `GroundingGuard` 已覆盖价格、优惠、库存、销量和绝对化表述；后续仍可扩展为逐句 citation/fact-check
 - [ ] 商品详情页仍是本地模拟页，尚未接真实电商落地页
+- [ ] session/cart 已支持 SQLite 和 Redis 后端；trace 仍是单进程内存态，生产多实例部署前应迁移到 Redis Stream、外部数据库或结构化日志系统
 
 ## 下一步
 
@@ -138,6 +159,6 @@ Android 真机 App
 2. 继续完善 taxonomy 覆盖面，把更多商品类型、品牌和功效词沉淀为可配置元数据，并为 taxonomy 变更建立索引重灌/回归提醒。
 3. 继续完善多轮查询改写，覆盖更多类目和偏好组合。
 4. 扩充离线评估集，覆盖更多类目、失败样例、长链多轮和购物车边界条件。
-5. 从 rerank、多模态、真实 embedding 灌库回归或 Demo 录屏中选择 1 个方向深入实现。
+5. 从 rerank、真实 VLM、真实 embedding 灌库回归或 Demo 录屏中选择 1 个方向深入实现。
 6. 做 Demo 脚本和答辩截图/录屏材料。
 7. 后续如有真实商品落地页，再替换当前本地模拟页 URL。

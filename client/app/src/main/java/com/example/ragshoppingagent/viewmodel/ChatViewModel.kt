@@ -19,6 +19,10 @@ data class ChatUiState(
     val cart: CartState? = null,
     val input: String = "",
     val isStreaming: Boolean = false,
+    val selectedImageUri: String = "",
+    val selectedImageBase64: String = "",
+    val selectedImageMimeType: String = "",
+    val selectedImageName: String = "",
 )
 
 class ChatViewModel : ViewModel() {
@@ -32,9 +36,34 @@ class ChatViewModel : ViewModel() {
         _uiState.update { it.copy(input = value) }
     }
 
+    fun attachImage(uri: String, base64: String, mimeType: String, name: String) {
+        _uiState.update {
+            it.copy(
+                selectedImageUri = uri,
+                selectedImageBase64 = base64,
+                selectedImageMimeType = mimeType,
+                selectedImageName = name,
+            )
+        }
+    }
+
+    fun clearImage() {
+        _uiState.update {
+            it.copy(
+                selectedImageUri = "",
+                selectedImageBase64 = "",
+                selectedImageMimeType = "",
+                selectedImageName = "",
+            )
+        }
+    }
+
     fun sendMessage() {
-        val text = _uiState.value.input.trim()
-        if (text.isEmpty() || _uiState.value.isStreaming) return
+        val current = _uiState.value
+        val hasImage = current.selectedImageBase64.isNotBlank()
+        val text = current.input.trim()
+        if ((text.isEmpty() && !hasImage) || current.isStreaming) return
+        val messageText = text.ifEmpty { "我想找图片里的同款或相似商品" }
 
         val assistantId = UUID.randomUUID().toString()
         _uiState.update {
@@ -43,8 +72,16 @@ class ChatViewModel : ViewModel() {
                 isStreaming = true,
                 products = emptyList(),
                 comparison = null,
+                selectedImageUri = "",
+                selectedImageBase64 = "",
+                selectedImageMimeType = "",
+                selectedImageName = "",
                 messages = it.messages +
-                    ChatMessage(UUID.randomUUID().toString(), Role.User, text) +
+                    ChatMessage(
+                        UUID.randomUUID().toString(),
+                        Role.User,
+                        if (hasImage) "$messageText\n[已附加图片]" else messageText,
+                    ) +
                     ChatMessage(assistantId, Role.Assistant, ""),
             )
         }
@@ -56,11 +93,19 @@ class ChatViewModel : ViewModel() {
             onProduct = { product -> _uiState.update { it.copy(products = it.products + product) } },
             onComparison = { comparison -> _uiState.update { it.copy(comparison = comparison) } },
             onCart = { cart -> _uiState.update { it.copy(cart = cart) } },
+            onImageAnalysis = { summary ->
+                if (summary.isNotBlank()) {
+                    appendAssistantToken(assistantId, "图片识别：$summary\n")
+                }
+            },
             onDone = { _uiState.update { it.copy(isStreaming = false) } },
             onError = { error ->
                 appendAssistantToken(assistantId, "\n请求失败：${error.message ?: "未知错误"}")
                 _uiState.update { it.copy(isStreaming = false) }
             },
+            imageBase64 = current.selectedImageBase64,
+            imageMimeType = current.selectedImageMimeType,
+            imageFilename = current.selectedImageName,
         )
     }
 

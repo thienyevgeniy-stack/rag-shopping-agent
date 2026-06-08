@@ -1,0 +1,46 @@
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass
+from typing import Protocol
+
+from server.agent.intent import UserIntent
+from server.agent.semantic import SemanticPlan
+from server.llm.ark_client import LLMClient
+from server.rag.post_process import SearchFilters
+from server.session.state import SessionState
+from server.tools.registry import ToolRegistry
+
+
+@dataclass
+class AgentTurnContext:
+    session_id: str
+    message: str
+    intent: UserIntent
+    query: str
+    filters: SearchFilters
+    plan: SemanticPlan
+    session: SessionState
+    registry: ToolRegistry
+    llm_client: LLMClient | None
+    selected_handler: str = ""
+
+
+class AgentHandler(Protocol):
+    def matches(self, context: AgentTurnContext) -> bool:
+        ...
+
+    async def handle(self, context: AgentTurnContext) -> AsyncIterator[dict]:
+        ...
+
+
+class AgentWorkflow:
+    def __init__(self, handlers: Sequence[AgentHandler]) -> None:
+        self.handlers = list(handlers)
+
+    async def stream(self, context: AgentTurnContext) -> AsyncIterator[dict]:
+        for handler in self.handlers:
+            if handler.matches(context):
+                context.selected_handler = handler.__class__.__name__
+                async for item in handler.handle(context):
+                    yield item
+                return
+        raise RuntimeError("No agent handler matched the turn.")

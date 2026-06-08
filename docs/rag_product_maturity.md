@@ -49,6 +49,8 @@
    - LLM 只基于候选商品生成回答。
    - 检索为空时明确降级，不返回虚假商品卡。
    - 商品卡和对比卡始终以结构化 SSE 发送给 Android。
+   - 推荐回答不再直接流出 LLM token；后端会先缓冲完整 LLM 输出，通过 `GroundingGuard` 校验后再流式发送。
+   - `GroundingGuard` 会拦截未提供的优惠/库存/销量、候选外价格、缺少候选引用和绝对化功效，触发 `guardrail` 事件并降级为确定性 grounded 模板。
 
 6. **可评估可回归**
    - 每次能力增强都加入 pytest 场景。
@@ -121,5 +123,15 @@ Android App
    - Android 端展示“当前理解到的条件”，让用户可修改。
 
 5. **Multimodal**
-   - 接入图片输入后，先输出结构化视觉摘要，再进入同一个 `SemanticPlanner`。
+   - 已接入轻量图片输入：Android 选择图片后随 `/chat` 上传，后端用商品主图视觉签名做相似匹配。
+   - 图片匹配只生成结构化视觉线索，例如“最像商品 X / 类目 Y / 类型 Z”，再进入同一个 `SemanticPlanner`。
    - 图片理解结果仍不能直接生成商品事实，必须通过商品库检索验证。
+   - 后续可将视觉签名替换为 VLM/CLIP embedding，而不改变 AgentWorkflow 和端侧协议。
+
+6. **Scenario Bundle**
+   - 已加入 `ScenarioBundleHandler`，将“三亚度假/通勤/运动训练/搭配一套”等需求拆成多个商品槽位。
+   - 每个槽位独立检索和过滤，再合并为组合方案，避免让 LLM 直接编一套不存在的商品组合。
+
+7. **Latency**
+   - 推荐和组合链路先发即时 token，降低用户等待感。
+   - `scripts/benchmark_first_token.py` 可对 `/chat` 做正式首 Token 压测，默认阈值 1000ms。

@@ -29,12 +29,23 @@ class ChatSseClient(
         onProduct: (ProductCard) -> Unit,
         onComparison: (ComparisonCard) -> Unit,
         onCart: (CartState) -> Unit,
+        onImageAnalysis: (String) -> Unit,
         onDone: () -> Unit,
         onError: (Throwable) -> Unit,
+        imageBase64: String = "",
+        imageMimeType: String = "",
+        imageFilename: String = "",
     ): EventSource {
         val body = JSONObject()
             .put("session_id", sessionId)
             .put("message", message)
+            .apply {
+                if (imageBase64.isNotBlank()) {
+                    put("image_base64", imageBase64)
+                    put("image_mime_type", imageMimeType)
+                    put("image_filename", imageFilename)
+                }
+            }
             .toString()
             .toRequestBody("application/json; charset=utf-8".toMediaType())
 
@@ -58,6 +69,7 @@ class ChatSseClient(
                         "product_card" -> onProduct(ProductCard.fromJson(json))
                         "comparison_card" -> onComparison(ComparisonCard.fromJson(json))
                         "cart_update" -> onCart(CartState.fromJson(json))
+                        "image_analysis" -> onImageAnalysis(json.optString("summary"))
                         "done" -> onDone()
                     }
                 }

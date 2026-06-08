@@ -11,6 +11,15 @@ class Settings(BaseSettings):
     app_env: str = "development"
     server_host: str = "127.0.0.1"
     server_port: int = 8000
+    enable_debug_api: bool | None = None
+    cors_allowed_origins: str = "http://127.0.0.1:8000,http://localhost:8000"
+    cors_allow_credentials: bool = False
+    session_backend: str = "memory"
+    session_db_path: str = "server/runtime/sessions.sqlite3"
+    session_redis_url: str = "redis://localhost:6379/0"
+    session_ttl_seconds: int = 43200
+    session_max_items: int = 500
+    trace_max_items: int = 200
 
     ark_api_key: str = ""
     ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
@@ -47,9 +56,32 @@ class Settings(BaseSettings):
         return path if path.is_absolute() else ROOT_DIR / path
 
     @property
+    def session_db_file(self) -> Path:
+        path = Path(self.session_db_path)
+        return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def normalized_session_backend(self) -> str:
+        return self.session_backend.strip().lower()
+
+    @property
     def product_image_path(self) -> Path:
         path = Path(self.product_image_dir)
         return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def debug_api_enabled(self) -> bool:
+        if self.enable_debug_api is not None:
+            return self.enable_debug_api
+        return self.app_env.lower() not in {"prod", "production"}
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def cors_credentials_enabled(self) -> bool:
+        return self.cors_allow_credentials and "*" not in self.cors_origins
 
 
 @lru_cache

@@ -1,52 +1,32 @@
 package com.example.ragshoppingagent.ui
 
+import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.example.ragshoppingagent.model.CartItem
 import com.example.ragshoppingagent.model.CartState
 import com.example.ragshoppingagent.model.ChatMessage
@@ -67,7 +47,10 @@ fun ChatRoute(viewModel: ChatViewModel = viewModel()) {
         cart = state.cart,
         input = state.input,
         isStreaming = state.isStreaming,
+        selectedImageUri = state.selectedImageUri,
         onInputChange = viewModel::onInputChange,
+        onAttachImage = viewModel::attachImage,
+        onClearImage = viewModel::clearImage,
         onSend = viewModel::sendMessage,
     )
 }
@@ -80,17 +63,40 @@ fun ChatScreen(
     cart: CartState?,
     input: String,
     isStreaming: Boolean,
+    selectedImageUri: String,
     onInputChange: (String) -> Unit,
+    onAttachImage: (String, String, String, String) -> Unit,
+    onClearImage: () -> Unit,
     onSend: () -> Unit,
 ) {
     var selectedProduct by remember { mutableStateOf<ProductCard?>(null) }
+    val context = LocalContext.current
+    val imagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            if (bytes != null) {
+                val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                onAttachImage(uri.toString(), encoded, mimeType, uri.lastPathSegment ?: "picked_image")
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {
             MessageComposer(
                 value = input,
                 enabled = !isStreaming,
+                selectedImageUri = selectedImageUri,
                 onValueChange = onInputChange,
+                onPickImage = {
+                    imagePicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
+                },
+                onClearImage = onClearImage,
                 onSend = onSend,
             )
         },
@@ -147,380 +153,6 @@ fun ChatScreen(
             product = product,
             onDismiss = { selectedProduct = null },
         )
-    }
-}
-
-@Composable
-private fun CartPanel(
-    cart: CartState,
-    modifier: Modifier = Modifier,
-    onOpenItem: (CartItem) -> Unit,
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = RoundedCornerShape(8.dp),
-        tonalElevation = 1.dp,
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "购物车",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-                Text(
-                    text = "${cart.totalQuantity} 件 · ¥${cart.totalPrice.toInt()}",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
-
-            if (cart.isEmpty) {
-                Text(
-                    text = "当前购物车为空",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            } else {
-                cart.items.takeLast(3).forEach { item ->
-                    CartItemRow(item = item, onOpen = { onOpenItem(item) })
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CartItemRow(item: CartItem, onOpen: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(6.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onOpen)
-                .padding(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = item.brand.ifBlank { item.category },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Text(
-                text = "×${item.quantity}",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = "¥${(item.price * item.quantity).toInt()}",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
-}
-
-private fun CartItem.toProductCard(): ProductCard {
-    return ProductCard(
-        id = productId,
-        name = name,
-        category = category,
-        brand = brand,
-        price = price,
-        imageUrl = imageUrl,
-        detailUrl = detailUrl,
-        reason = "购物车商品",
-    )
-}
-
-@Composable
-private fun ComparisonPanel(comparison: ComparisonCard, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(8.dp),
-        tonalElevation = 1.dp,
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = comparison.title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            if (comparison.recommendation.summary.isNotBlank()) {
-                Text(
-                    text = comparison.recommendation.summary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (comparison.recommendation.focus.isNotBlank()) {
-                Text(
-                    text = "关注点：${comparison.recommendation.focus}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            comparison.products.take(3).forEach { product ->
-                ComparisonProductRow(
-                    product = product,
-                    isRecommended = product.id == comparison.recommendation.productId,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ComparisonProductRow(product: ComparisonProduct, isRecommended: Boolean) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(6.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = product.brand.ifBlank { product.category },
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = if (isRecommended) "推荐 · ¥${product.price.toInt()}" else "¥${product.price.toInt()}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (isRecommended) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Text(
-                text = product.name,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "优势：${formatComparisonList(product.strengths)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "取舍：${formatComparisonList(product.tradeoffs)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-private fun formatComparisonList(values: List<String>): String {
-    return values.take(3).joinToString("、").ifBlank { "需结合个人偏好确认" }
-}
-
-@Composable
-private fun MessageBubble(message: ChatMessage) {
-    val isUser = message.role == Role.User
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-    ) {
-        Surface(
-            color = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(8.dp),
-            tonalElevation = if (isUser) 0.dp else 1.dp,
-            modifier = Modifier.fillMaxWidth(0.84f),
-        ) {
-            Text(
-                text = message.text.ifEmpty { " " },
-                color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProductCardItem(product: ProductCard, onOpen: (ProductCard) -> Unit) {
-    Card(
-        onClick = { onOpen(product) },
-        modifier = Modifier.width(232.dp),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Column(
-            modifier = Modifier
-                .heightIn(min = 260.dp)
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            ProductImage(
-                imageUrl = product.imageUrl,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1.25f)
-                    .clip(RoundedCornerShape(6.dp)),
-            )
-            Text(
-                text = product.name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 3,
-            )
-            Text(text = product.brand, style = MaterialTheme.typography.labelMedium)
-            Text(
-                text = "¥${product.price.toInt()}",
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = product.reason,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 3,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProductDetailDialog(product: ProductCard, onDismiss: () -> Unit) {
-    val uriHandler = LocalUriHandler.current
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(text = product.name, style = MaterialTheme.typography.titleMedium)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ProductImage(
-                    imageUrl = product.imageUrl,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1.35f)
-                        .clip(RoundedCornerShape(8.dp)),
-                )
-                Text(text = "${product.brand} · ${product.category}", style = MaterialTheme.typography.labelLarge)
-                Text(
-                    text = "¥${product.price.toInt()}",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(text = product.reason, style = MaterialTheme.typography.bodyMedium)
-            }
-        },
-        confirmButton = {
-            if (product.detailUrl.isNotBlank()) {
-                TextButton(onClick = { uriHandler.openUri(product.detailUrl) }) {
-                    Text("打开链接")
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("关闭")
-            }
-        },
-    )
-}
-
-@Composable
-private fun ProductImage(imageUrl: String, modifier: Modifier = Modifier) {
-    var failed by remember(imageUrl) { mutableStateOf(false) }
-
-    if (imageUrl.isBlank() || failed) {
-        Box(
-            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "暂无图片",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-        return
-    }
-
-    AsyncImage(
-        model = imageUrl,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        onError = { failed = true },
-        modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
-    )
-}
-
-@Composable
-private fun MessageComposer(
-    value: String,
-    enabled: Boolean,
-    onValueChange: (String) -> Unit,
-    onSend: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
-            enabled = enabled,
-            minLines = 1,
-            maxLines = 3,
-            placeholder = { Text("说说你想买什么") },
-        )
-        IconButton(
-            onClick = onSend,
-            enabled = enabled && value.isNotBlank(),
-        ) {
-            Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = "发送")
-        }
     }
 }
 
@@ -596,7 +228,10 @@ private fun ChatScreenPreview() {
             ),
             input = "",
             isStreaming = false,
+            selectedImageUri = "",
             onInputChange = {},
+            onAttachImage = { _, _, _, _ -> },
+            onClearImage = {},
             onSend = {},
         )
     }

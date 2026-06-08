@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import AsyncIterator
 
 from server.agent.orchestrator import Orchestrator
-from server.session.state import SessionStore
+from server.session.state import SQLiteSessionStore, SessionStore
 from server.tools.cart import CartTool
 from server.tools.product_compare import ProductCompareTool
 from server.tools.registry import ToolRegistry
@@ -52,13 +52,17 @@ class FakeLLMClient:
             yield token
 
 
-def make_orchestrator(cards: list[dict], llm_client: FakeLLMClient | None) -> Orchestrator:
+def make_orchestrator(
+    cards: list[dict],
+    llm_client: FakeLLMClient | None,
+    sessions: SessionStore | SQLiteSessionStore | None = None,
+) -> Orchestrator:
     registry = ToolRegistry()
     search_tool = FixedSearchTool(cards)
     registry.register(search_tool)
     registry.register(ProductCompareTool(search_tool))
     registry.register(CartTool())
-    return Orchestrator(registry=registry, sessions=SessionStore(), llm_client=llm_client)
+    return Orchestrator(registry=registry, sessions=sessions or SessionStore(), llm_client=llm_client)
 
 
 def collect_events(orchestrator: Orchestrator, message: str) -> list[dict]:
@@ -73,12 +77,13 @@ def token_text(events: list[dict]) -> str:
 
 
 def test_orchestrator_streams_llm_answer_when_configured() -> None:
-    llm = FakeLLMClient(tokens=["LLM", "回答"])
+    llm = FakeLLMClient(tokens=["科颜氏牛油果保湿眼霜", "更适合保湿需求。"])
     orchestrator = make_orchestrator(cards=[PRODUCT_CARD], llm_client=llm)
 
     events = collect_events(orchestrator, "推荐一款眼霜")
 
-    assert token_text(events) == "LLM回答"
+    assert token_text(events).startswith("我先看一下，")
+    assert token_text(events).endswith("科颜氏牛油果保湿眼霜更适合保湿需求。")
     assert any(item["event"] == "product_card" for item in events)
     assert llm.calls
     assert llm.calls[0]["cards"][0]["id"] == "p_beauty_021"
@@ -92,6 +97,21 @@ def test_orchestrator_falls_back_to_template_when_llm_fails() -> None:
 
     assert "根据当前商品库检索结果" in token_text(events)
     assert any(item["event"] == "product_card" for item in events)
+
+
+def test_orchestrator_guards_unsafe_llm_answer_before_streaming() -> None:
+    llm = FakeLLMClient(tokens=["科颜氏牛油果保湿眼霜现在有50元优惠券，只要99元。"])
+    orchestrator = make_orchestrator(cards=[PRODUCT_CARD], llm_client=llm)
+
+    events = collect_events(orchestrator, "推荐一款眼霜")
+    answer = token_text(events)
+
+    assert "优惠券" not in answer
+    assert "99元" not in answer
+    assert "根据当前商品库检索结果" in answer
+    guardrail = [item for item in events if item["event"] == "guardrail"]
+    assert guardrail
+    assert guardrail[0]["data"]["action"] == "fallback"
 
 
 def test_orchestrator_skips_llm_when_no_cards() -> None:
@@ -160,6 +180,24 @@ def test_orchestrator_emits_cart_update_after_add_to_cart() -> None:
     events = collect_events(orchestrator, "把刚才那款加到购物车")
 
     assert "已将 科颜氏牛油果保湿眼霜 加入购物车" in token_text(events)
+    cart_update = [item for item in events if item["event"] == "cart_update"][-1]
+    assert cart_update["data"]["total_quantity"] == 1
+    assert cart_update["data"]["items"][0]["product_id"] == "p_beauty_021"
+
+
+def test_orchestrator_persists_cart_with_sqlite_session_store(tmp_path) -> None:
+    db_path = tmp_path / "sessions.sqlite3"
+    first_store = SQLiteSessionStore(db_path)
+    first_orchestrator = make_orchestrator(cards=[PRODUCT_CARD], llm_client=None, sessions=first_store)
+
+    collect_events(first_orchestrator, "推荐一款眼霜")
+    collect_events(first_orchestrator, "把刚才那款加到购物车")
+
+    second_store = SQLiteSessionStore(db_path)
+    second_orchestrator = make_orchestrator(cards=[PRODUCT_CARD], llm_client=None, sessions=second_store)
+    events = collect_events(second_orchestrator, "查看购物车")
+
+    assert "购物车中有：1. 科颜氏牛油果保湿眼霜" in token_text(events)
     cart_update = [item for item in events if item["event"] == "cart_update"][-1]
     assert cart_update["data"]["total_quantity"] == 1
     assert cart_update["data"]["items"][0]["product_id"] == "p_beauty_021"

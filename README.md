@@ -8,6 +8,7 @@
 - 后端提供 `/health` 和 `/chat` SSE 接口
 - 后端支持本地 JSON 商品检索 fallback，也可通过 `USE_CHROMA=true` 启用 Chroma
 - 后端可通过 `USE_LLM=true` 接入 Doubao/Ark 生成回答，失败时自动回退模板回答
+- 后端提供 `GroundingGuard` 回答后校验：拦截未提供的优惠/库存/销量、候选外价格和高风险绝对化功效，并自动降级为 grounded 模板回答
 - Chroma 默认使用本地 hashing embedding；可通过 `USE_ARK_EMBEDDING=true` 切换到 Ark/Doubao embedding
 - 检索层支持 `product_type` 和价格 metadata 预过滤；Chroma 会使用 metadata `where` 下推，本地 JSON fallback 会使用商品类型倒排索引和文档特征缓存
 - 后端支持主动澄清：宽泛需求会先追问预算/偏好，再进入检索
@@ -17,6 +18,9 @@
 - 后端支持结构化语义规划：LLM JSON plan + Pydantic 校验 + 规则 fallback，减少对固定句式的依赖
 - 后端支持可配置商品 taxonomy：将“运动鞋/跑鞋/跑步的鞋/运动裤/手机”等归一为标准 `product_type`，作为检索前 facet 过滤条件
 - 后端支持商品范围切换时清理旧过滤条件，避免长会话中旧品类、旧预算污染新需求
+- 后端支持轻量多模态找货：Android 可附加图片，后端用商品主图视觉签名做相似匹配，再进入同一 RAG 检索流程
+- 后端支持场景化组合推荐：如“三亚度假/通勤/运动训练”会拆成多个商品槽位并跨类目返回组合方案
+- 后端加入首 Token 延迟压测脚本，推荐和组合链路会先发即时 token，降低用户等待感
 - 后端智能体已拆为轻量 `AgentWorkflow`：澄清、购物车、对比、上下文追问和普通推荐分别由 handler 承接
 - 后端提供 Agent trace 和离线评估脚本，支持定位 planner、handler、检索和购物车链路问题
 - 后端通过 `/assets/products/...` 提供商品主图静态资源
@@ -70,6 +74,13 @@ python scripts\benchmark_retrieval.py --store local --sizes 50000 --runs 1 --war
 python scripts\benchmark_retrieval.py --store chroma --sizes 1000 --runs 1 --warmup 0 --top-k 5 --output docs\retrieval_benchmark_2026-06-07-chroma-1k.json
 ```
 
+首 Token 延迟压测：
+
+```powershell
+cd D:\RAG
+python scripts\benchmark_first_token.py --url http://127.0.0.1:8000/chat --runs 3 --warmup 1 --threshold-ms 1000 --output docs\first_token_benchmark_2026-06-07.json
+```
+
 查看最近对话 trace：
 
 ```powershell
@@ -120,6 +131,26 @@ $env:USE_LLM="true"
 
 如果未配置 `ARK_API_KEY` 或模型调用失败，后端会自动回退到本地模板回答，`/chat` 不会因此中断。
 
+生产/部署相关开关：
+
+```powershell
+# development 默认开启 /debug；production 默认关闭 /debug
+$env:APP_ENV="production"
+$env:CORS_ALLOWED_ORIGINS="https://your-web.example.com"
+$env:CORS_ALLOW_CREDENTIALS="false"
+$env:SESSION_BACKEND="sqlite"
+$env:SESSION_DB_PATH="server/runtime/sessions.sqlite3"
+$env:SESSION_REDIS_URL="redis://localhost:6379/0"
+$env:SESSION_TTL_SECONDS="43200"
+$env:SESSION_MAX_ITEMS="500"
+$env:TRACE_MAX_ITEMS="200"
+.\scripts\run_server.ps1
+```
+
+如需在非生产环境强制开关调试接口，可设置 `ENABLE_DEBUG_API=true|false`。生产部署不要使用通配 CORS，也不要对公网开放 `/debug`。
+
+`SESSION_BACKEND=memory` 适合本地临时调试；`SESSION_BACKEND=sqlite` 会把会话、候选商品和购物车持久化到 `SESSION_DB_PATH`，服务重启后同一 `session_id` 可恢复购物车状态。SQLite 文件属于运行时数据，已被 `.gitignore` 排除。多实例生产部署可设置 `SESSION_BACKEND=redis` 和 `SESSION_REDIS_URL`，让多个后端进程共享会话与购物车状态。
+
 启用 LLM 语义规划（可选，默认关闭以保证演示延迟稳定）：
 
 ```powershell
@@ -153,10 +184,10 @@ Invoke-WebRequest `
 
 1. 已跑通最小闭环：Android 输入 → FastAPI → 检索 → Doubao/模板生成 → SSE 回复 → 商品主图卡片 → 商品详情页
 2. 已接入 Chroma 持久化链路、Ark/Doubao embedding 适配和 Doubao/Ark 回答生成
-3. 已实现基础主动澄清、澄清主题补全、上下文追问、商品对比、端侧对比面板和对话式购物车，并完成后端智能体工作流和语义规划层拆分
+3. 已实现基础主动澄清、澄清主题补全、上下文追问、商品对比、端侧对比面板、对话式购物车、图片找货入口和场景化组合推荐，并完成后端智能体工作流和语义规划层拆分
 4. 已加入商品 taxonomy/facet 过滤、商品范围状态清理、Agent trace 和离线评估样例，用于持续检查 planner、handler、商品命中和购物车行为
-5. 已加入大库检索压测脚本、本地 fallback 倒排索引/特征缓存、Chroma metadata where 下推和压测报告；下一步从真实 Chroma embedding 灌库回归、rerank、评估集扩充、多模态和 Demo 录屏中选择 1-2 个方向深入完善
+5. 已加入大库检索压测脚本、首 Token 压测脚本、本地 fallback 倒排索引/特征缓存、Chroma metadata where 下推和压测报告；下一步从真实 Chroma embedding 灌库回归、rerank、评估集扩充和 Demo 录屏中选择 1-2 个方向深入完善
 
-详细设计见 [docs/architecture.md](docs/architecture.md)、[docs/rag_product_maturity.md](docs/rag_product_maturity.md)、[docs/retrieval_benchmark_2026-06-07.md](docs/retrieval_benchmark_2026-06-07.md)、[docs/api.md](docs/api.md) 和 [docs/progress.md](docs/progress.md)。
+详细设计见 [docs/architecture.md](docs/architecture.md)、[docs/rag_product_maturity.md](docs/rag_product_maturity.md)、[docs/retrieval_benchmark_2026-06-07.md](docs/retrieval_benchmark_2026-06-07.md)、[docs/first_token_benchmark_2026-06-07.md](docs/first_token_benchmark_2026-06-07.md)、[docs/api.md](docs/api.md) 和 [docs/progress.md](docs/progress.md)。
 
 Android 构建与联调见 [docs/android_setup.md](docs/android_setup.md)。

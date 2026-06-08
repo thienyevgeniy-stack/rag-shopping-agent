@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from functools import lru_cache
 import time
@@ -9,7 +10,7 @@ from server.agent.query_rewriter import rewrite_query
 from server.agent.semantic import SemanticPlanner
 from server.agent.tracing import InMemoryTraceStore, build_trace
 from server.config import get_settings
-from server.inputs.processors import TextProcessor
+from server.inputs.processors import MultimodalInputProcessor, TextProcessor
 from server.llm.ark_client import ArkChatClient, LLMClient
 from server.rag.post_process import SearchFilters
 from server.rag.vector_store import (
@@ -18,7 +19,7 @@ from server.rag.vector_store import (
     build_chroma_embedding_function,
     load_product_documents,
 )
-from server.session.state import SessionStore
+from server.session.state import PersistentSessionStore, RedisSessionStore, SQLiteSessionStore, SessionStore
 from server.tools.cart import CartTool
 from server.tools.product_compare import ProductCompareTool
 from server.tools.product_search import ProductSearchTool
@@ -29,11 +30,12 @@ class Orchestrator:
     def __init__(
         self,
         registry: ToolRegistry,
-        sessions: SessionStore,
+        sessions: PersistentSessionStore,
         llm_client: LLMClient | None = None,
         workflow: AgentWorkflow | None = None,
         semantic_planner: SemanticPlanner | None = None,
         trace_store: InMemoryTraceStore | None = None,
+        input_processor: TextProcessor | MultimodalInputProcessor | None = None,
     ) -> None:
         self.registry = registry
         self.sessions = sessions
@@ -41,56 +43,82 @@ class Orchestrator:
         self.workflow = workflow or build_default_workflow()
         self.semantic_planner = semantic_planner or SemanticPlanner()
         self.trace_store = trace_store or InMemoryTraceStore()
-        self.input_processor = TextProcessor()
+        self.input_processor = input_processor or TextProcessor()
 
     async def stream_chat(
         self,
         session_id: str,
         user_message: str,
+        image_base64: str = "",
+        image_mime_type: str = "",
+        image_filename: str = "",
     ) -> AsyncIterator[dict]:
         started_at = time.time()
         session = self.sessions.get(session_id)
-        session.add_user_message(user_message)
+        try:
+            session.add_user_message(user_message)
 
-        processed = self.input_processor.process(user_message)
-        plan = await self.semantic_planner.plan(processed.text, session)
-        extracted = plan.to_filter_conditions()
-        extracted.extend(extract_contextual_filters(processed.text, session, plan))
-        session.merge_filters(extracted)
+            emitted: list[dict] = []
+            first_token = {"event": "token", "data": {"text": "我先看一下，"}}
+            emitted.append(first_token)
+            yield first_token
+            await asyncio.sleep(0.001)
 
-        intent = plan.to_user_intent()
-        query = plan.query or rewrite_query(processed.text, session)
-        filters = SearchFilters.from_session(session)
+            processed = self.input_processor.process(
+                user_message,
+                image_base64=image_base64,
+                image_mime_type=image_mime_type,
+                image_filename=image_filename,
+            )
+            if processed.image_summary:
+                image_event = {
+                    "event": "image_analysis",
+                    "data": {
+                        "summary": processed.image_summary,
+                        "matches": processed.visual_matches,
+                    },
+                }
+                emitted.append(image_event)
+                yield image_event
+            plan = await self.semantic_planner.plan(processed.text, session)
+            extracted = plan.to_filter_conditions()
+            extracted.extend(extract_contextual_filters(processed.text, session, plan))
+            session.merge_filters(extracted)
 
-        context = AgentTurnContext(
-            session_id=session_id,
-            message=processed.text,
-            intent=intent,
-            query=query,
-            filters=filters,
-            plan=plan,
-            session=session,
-            registry=self.registry,
-            llm_client=self.llm_client,
-        )
+            intent = plan.to_user_intent()
+            query = plan.query or rewrite_query(processed.text, session)
+            filters = SearchFilters.from_session(session)
 
-        emitted: list[dict] = []
-        async for item in self.workflow.stream(context):
-            emitted.append(item)
-            yield item
-
-        self.trace_store.add(
-            build_trace(
+            context = AgentTurnContext(
                 session_id=session_id,
                 message=processed.text,
-                handler=context.selected_handler,
-                plan=plan,
+                intent=intent,
                 query=query,
                 filters=filters,
-                events=emitted,
-                started_at=started_at,
+                plan=plan,
+                session=session,
+                registry=self.registry,
+                llm_client=self.llm_client,
             )
-        )
+
+            async for item in self.workflow.stream(context):
+                emitted.append(item)
+                yield item
+
+            self.trace_store.add(
+                build_trace(
+                    session_id=session_id,
+                    message=processed.text,
+                    handler=context.selected_handler,
+                    plan=plan,
+                    query=query,
+                    filters=filters,
+                    events=emitted,
+                    started_at=started_at,
+                )
+            )
+        finally:
+            self.sessions.save(session)
 
 
 @lru_cache
@@ -106,10 +134,34 @@ def get_orchestrator() -> Orchestrator:
     semantic_client = llm_client if settings.use_semantic_llm else None
     return Orchestrator(
         registry=registry,
-        sessions=SessionStore(),
+        sessions=create_session_store(settings),
         llm_client=llm_client,
         semantic_planner=SemanticPlanner(semantic_client),
+        trace_store=InMemoryTraceStore(max_items=settings.trace_max_items),
+        input_processor=MultimodalInputProcessor(settings.product_data_file, settings.product_image_path),
     )
+
+
+def create_session_store(settings) -> PersistentSessionStore:
+    backend = settings.normalized_session_backend
+    if backend in {"memory", "inmemory", "in-memory"}:
+        return SessionStore(
+            max_items=settings.session_max_items,
+            ttl_seconds=settings.session_ttl_seconds,
+        )
+    if backend in {"sqlite", "sqlite3", "db"}:
+        return SQLiteSessionStore(
+            settings.session_db_file,
+            max_items=settings.session_max_items,
+            ttl_seconds=settings.session_ttl_seconds,
+        )
+    if backend == "redis":
+        return RedisSessionStore(
+            settings.session_redis_url,
+            max_items=settings.session_max_items,
+            ttl_seconds=settings.session_ttl_seconds,
+        )
+    raise ValueError(f"Unsupported SESSION_BACKEND: {settings.session_backend}")
 
 
 def create_store(settings):

@@ -12,9 +12,12 @@ __pycache__/
 venv/
 
 # Runtime data
+server/runtime/
 server/chroma_db/
 server/.chroma/
 data/processed/
+*.sqlite
+*.sqlite3
 *.log
 ~$*
 *.tmp
