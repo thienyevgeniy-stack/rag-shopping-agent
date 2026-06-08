@@ -82,11 +82,34 @@ def test_orchestrator_streams_llm_answer_when_configured() -> None:
 
     events = collect_events(orchestrator, "推荐一款眼霜")
 
-    assert token_text(events).startswith("我先看一下，")
-    assert token_text(events).endswith("科颜氏牛油果保湿眼霜更适合保湿需求。")
+    assert events[0]["event"] == "status"
+    assert token_text(events) == "".join(llm.tokens)
     assert any(item["event"] == "product_card" for item in events)
     assert llm.calls
     assert llm.calls[0]["cards"][0]["id"] == "p_beauty_021"
+
+
+def test_orchestrator_orders_product_cards_by_answer_mentions() -> None:
+    first = {**PRODUCT_CARD, "id": "alpha", "name": "Alpha Running Shoe", "brand": "Alpha"}
+    second = {**PRODUCT_CARD, "id": "beta", "name": "Beta Running Shoe", "brand": "Beta"}
+    llm = FakeLLMClient(tokens=["Beta Running Shoe更适合你的日常训练需求。"])
+    orchestrator = make_orchestrator(cards=[first, second], llm_client=llm)
+
+    events = collect_events(orchestrator, "推荐一款运动鞋")
+    product_ids = [item["data"]["id"] for item in events if item["event"] == "product_card"]
+
+    assert product_ids[:2] == ["beta", "alpha"]
+
+
+def test_orchestrator_strips_markdown_from_llm_answer() -> None:
+    llm = FakeLLMClient(tokens=["**科颜氏牛油果保湿眼霜**更适合保湿需求。"])
+    orchestrator = make_orchestrator(cards=[PRODUCT_CARD], llm_client=llm)
+
+    events = collect_events(orchestrator, "推荐一款眼霜")
+    answer = token_text(events)
+
+    assert "**" not in answer
+    assert "科颜氏牛油果保湿眼霜" in answer
 
 
 def test_orchestrator_falls_back_to_template_when_llm_fails() -> None:
@@ -95,7 +118,8 @@ def test_orchestrator_falls_back_to_template_when_llm_fails() -> None:
 
     events = collect_events(orchestrator, "推荐一款眼霜")
 
-    assert "根据当前商品库检索结果" in token_text(events)
+    assert "我会优先推荐这款" in token_text(events)
+    assert "首选是" in token_text(events)
     assert any(item["event"] == "product_card" for item in events)
 
 
@@ -108,7 +132,7 @@ def test_orchestrator_guards_unsafe_llm_answer_before_streaming() -> None:
 
     assert "优惠券" not in answer
     assert "99元" not in answer
-    assert "根据当前商品库检索结果" in answer
+    assert "我会优先推荐这款" in answer
     guardrail = [item for item in events if item["event"] == "guardrail"]
     assert guardrail
     assert guardrail[0]["data"]["action"] == "fallback"

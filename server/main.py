@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from server.api.chat import router as chat_router
 from server.api.debug import router as debug_router
 from server.api.products import router as products_router
+from server.api.uploads import router as uploads_router
 from server.config import Settings
 from server.config import get_settings
 from server.agent.orchestrator import get_orchestrator
@@ -32,9 +33,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(chat_router)
     app.include_router(products_router)
+    app.include_router(uploads_router)
     if settings.debug_api_enabled:
         app.include_router(debug_router)
     settings.product_image_path.mkdir(parents=True, exist_ok=True)
+    settings.upload_image_path.mkdir(parents=True, exist_ok=True)
     app.mount(
         "/assets/products",
         StaticFiles(directory=settings.product_image_path, check_dir=False),

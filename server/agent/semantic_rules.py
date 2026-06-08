@@ -4,6 +4,7 @@ from typing import Any
 from server.agent.context import extract_referenced_index, select_contextual_product
 from server.agent.filters import extract_filters
 from server.agent.intent import UserIntent, detect_intent
+from server.agent.scenarios import has_scenario_match
 from server.agent.semantic_schema import CartAction, SemanticFilter, SemanticIntent, SemanticPlan
 from server.rag.taxonomy import extract_product_type_matches
 from server.session.state import SessionState
@@ -145,23 +146,7 @@ def map_rule_intent(
 
 
 def asks_for_bundle(message: str) -> bool:
-    return any(
-        word in message
-        for word in [
-            "三亚",
-            "海边",
-            "度假",
-            "旅游",
-            "旅行",
-            "搭配一套",
-            "组合推荐",
-            "一套方案",
-            "购买方案",
-            "全套",
-            "运动套装",
-            "跑步装备",
-        ]
-    )
+    return has_scenario_match(message)
 
 
 def asks_for_new_search(message: str) -> bool:

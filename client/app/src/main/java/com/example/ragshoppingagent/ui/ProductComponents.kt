@@ -67,7 +67,6 @@ fun ProductCardItem(product: ProductCard, onOpen: (ProductCard) -> Unit) {
             Text(
                 text = product.reason,
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 3,
             )
         }
     }

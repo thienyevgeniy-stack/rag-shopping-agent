@@ -48,6 +48,7 @@ class GroundingResult:
     safe: bool
     violations: list[str] = field(default_factory=list)
     action: str = "pass"
+    citations: list[dict] = field(default_factory=list)
 
 
 def guard_grounded_answer(
@@ -63,12 +64,13 @@ def guard_grounded_answer(
         allowed_extra_prices=allowed_extra_prices or [],
     )
     if not violations:
-        return GroundingResult(answer=answer, safe=True)
+        return GroundingResult(answer=answer, safe=True, citations=build_answer_citations(answer, cards))
     return GroundingResult(
         answer=fallback_answer,
         safe=False,
         violations=violations,
         action="fallback",
+        citations=build_answer_citations(fallback_answer, cards),
     )
 
 
@@ -109,7 +111,7 @@ def terms_in_text(text: str, terms: tuple[str, ...]) -> list[str]:
 
 
 def prices_not_grounded(answer: str, cards: list[dict], allowed_extra_prices: list[float]) -> list[str]:
-    allowed = {normalize_price(card.get("price", 0)) for card in cards}
+    allowed = {normalize_price(candidate_fact(card, "price", 0)) for card in cards}
     allowed.update(normalize_price(value) for value in allowed_extra_prices)
 
     unsupported: list[str] = []
@@ -130,10 +132,54 @@ def normalize_price(value) -> int:
 def references_any_candidate(answer: str, cards: list[dict]) -> bool:
     normalized_answer = answer.lower()
     for card in cards:
-        name = str(card.get("name", "")).strip()
-        brand = str(card.get("brand", "")).strip()
+        name = str(candidate_fact(card, "name", "")).strip()
+        brand = str(candidate_fact(card, "brand", "")).strip()
         if name and name in answer:
             return True
         if brand and brand.lower() in normalized_answer:
             return True
     return False
+
+
+def candidate_fact(card: dict, field: str, default=None):
+    evidence = card.get("evidence")
+    if isinstance(evidence, dict) and field in evidence:
+        return evidence[field]
+    if field == "product_id":
+        return card.get("id", default)
+    return card.get(field, default)
+
+
+def build_answer_citations(answer: str, cards: list[dict]) -> list[dict]:
+    citations: list[dict] = []
+    for card in cards:
+        product_id = candidate_fact(card, "product_id", "")
+        name = str(candidate_fact(card, "name", "")).strip()
+        brand = str(candidate_fact(card, "brand", "")).strip()
+        price = candidate_fact(card, "price", None)
+        cited_fields: list[str] = []
+
+        if name and name in answer:
+            cited_fields.append("name")
+        if brand and brand.lower() in answer.lower():
+            cited_fields.append("brand")
+        if price is not None and normalize_price(price) in mentioned_prices(answer):
+            cited_fields.append("price")
+
+        if cited_fields:
+            citations.append(
+                {
+                    "source": "product_catalog",
+                    "product_id": product_id,
+                    "fields": cited_fields,
+                }
+            )
+    return citations
+
+
+def mentioned_prices(answer: str) -> set[int]:
+    prices: set[int] = set()
+    for match in PRICE_PATTERN.finditer(answer):
+        raw = match.group(1) or match.group(2) or ""
+        prices.add(normalize_price(raw))
+    return prices

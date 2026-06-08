@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     use_semantic_llm: bool = False
     llm_timeout_seconds: float = 45.0
     use_ark_embedding: bool = False
+    ark_embedding_api: str = "text"
     ark_embedding_model: str = "doubao-embedding-text-240515"
     embedding_timeout_seconds: float = 60.0
     embedding_batch_size: int = 4
@@ -37,6 +38,14 @@ class Settings(BaseSettings):
     chroma_collection_name: str = "products"
     product_data_path: str = "data/products_ref.json"
     product_image_dir: str = "data/product_images"
+    use_visual_embedding: bool = False
+    visual_embedding_model: str = ""
+    visual_embedding_index_path: str = "server/runtime/product_image_vectors.json"
+    embedding_cache_path: str = "server/runtime/embedding_cache.sqlite3"
+    upload_image_dir: str = "server/runtime/uploads/images"
+    upload_image_max_bytes: int = 4_500_000
+    upload_image_ttl_seconds: int = 86_400
+    scenario_bundle_path: str = "data/scenario_bundles.json"
     public_base_url: str = "http://127.0.0.1:8000"
 
     model_config = SettingsConfigDict(
@@ -67,6 +76,30 @@ class Settings(BaseSettings):
     @property
     def product_image_path(self) -> Path:
         path = Path(self.product_image_dir)
+        return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def visual_embedding_model_name(self) -> str:
+        return self.visual_embedding_model.strip() or self.ark_embedding_model
+
+    @property
+    def visual_embedding_index_file(self) -> Path:
+        path = Path(self.visual_embedding_index_path)
+        return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def embedding_cache_file(self) -> Path:
+        path = Path(self.embedding_cache_path)
+        return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def upload_image_path(self) -> Path:
+        path = Path(self.upload_image_dir)
+        return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def scenario_bundle_file(self) -> Path:
+        path = Path(self.scenario_bundle_path)
         return path if path.is_absolute() else ROOT_DIR / path
 
     @property

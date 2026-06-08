@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from server.agent.intent import UserIntent
@@ -22,6 +22,7 @@ class AgentTurnContext:
     registry: ToolRegistry
     llm_client: LLMClient | None
     selected_handler: str = ""
+    metadata: dict[str, object] = field(default_factory=dict)
 
 
 class AgentHandler(Protocol):

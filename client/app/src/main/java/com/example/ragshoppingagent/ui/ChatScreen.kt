@@ -1,6 +1,5 @@
 package com.example.ragshoppingagent.ui
 
-import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -65,7 +64,7 @@ fun ChatScreen(
     isStreaming: Boolean,
     selectedImageUri: String,
     onInputChange: (String) -> Unit,
-    onAttachImage: (String, String, String, String) -> Unit,
+    onAttachImage: (String, ByteArray, String, String) -> Unit,
     onClearImage: () -> Unit,
     onSend: () -> Unit,
 ) {
@@ -77,9 +76,8 @@ fun ChatScreen(
         if (uri != null) {
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             if (bytes != null) {
-                val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
                 val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
-                onAttachImage(uri.toString(), encoded, mimeType, uri.lastPathSegment ?: "picked_image")
+                onAttachImage(uri.toString(), bytes, mimeType, uri.lastPathSegment ?: "picked_image")
             }
         }
     }

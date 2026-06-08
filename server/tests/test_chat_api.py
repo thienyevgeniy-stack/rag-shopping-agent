@@ -59,6 +59,7 @@ def test_chat_stream_returns_tokens_and_product_card() -> None:
     )
 
     assert response.status_code == 200
+    assert "event: status" in response.text
     assert "event: token" in response.text
     assert "event: product_card" in response.text
     assert "科颜氏牛油果保湿眼霜" in response.text
@@ -158,6 +159,28 @@ def test_debug_traces_capture_chat_turn() -> None:
     assert latest["plan"]["intent"] == "compare"
     assert "comparison_card" in latest["event_counts"]
     assert latest["comparison_product_ids"]
+
+
+def test_debug_traces_capture_strategy_metadata_for_scenario_bundle() -> None:
+    session_id = "pytest-strategy-trace"
+    response = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "去海岛玩，预算1000以内，帮我配一套防晒和穿搭",
+        },
+    )
+    traces = client.get(f"/debug/traces?session_id={session_id}")
+
+    assert response.status_code == 200
+    payload = traces.json()
+    assert payload
+    latest = payload[0]
+    assert latest["handler"] == "ScenarioBundleHandler"
+    assert latest["metadata"]["strategy"]["bundle_id"] == "sanya_trip"
+    assert latest["metadata"]["strategy"]["catalog_version"] == "2026-06-08"
+    assert latest["metadata"]["strategy"]["within_budget"] is True
+    assert latest["metadata"]["strategy"]["signals"]
 
 
 def test_debug_trace_detail_returns_404_for_missing_trace() -> None:

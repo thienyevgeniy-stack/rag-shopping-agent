@@ -25,15 +25,48 @@ def build_grounded_answer(message: str, cards: list[dict], intent: str) -> str:
             "你可以换一个类目、放宽预算，或补充更具体的需求。"
         )
 
-    names = "、".join(card["name"] for card in cards[:3])
-    prefix = "根据当前商品库检索结果，"
+    primary = cards[0]
+    alternatives = cards[1:3]
+
     if intent == "browsing":
-        prefix += "我先给你几个可参考的方向："
+        opening = "我先按当前商品库给你几个可参考的方向。"
     else:
-        prefix += "更匹配你这次需求的是："
+        opening = "我会优先推荐这款。"
 
-    reasons = []
-    for card in cards[:3]:
-        reasons.append(f"{card['name']}，价格 {card['price']} 元，理由是 {card['reason']}")
+    pieces = [
+        opening,
+        f"首选是 {format_product_reference(primary)}，{clean_reason(primary.get('reason', ''))}",
+    ]
+    if alternatives:
+        pieces.append("另外可以顺手对比：")
+        for card in alternatives:
+            pieces.append(f"{format_product_reference(card)}，{clean_reason(card.get('reason', ''))}")
+    pieces.append("如果你更看重预算、尺码/肤质、使用场景，我可以继续帮你把候选缩到一两款。")
+    return "\n".join(piece for piece in pieces if piece.strip())
 
-    return f"{prefix}{names}。 " + "；".join(reasons) + "。"
+
+def format_product_reference(card: dict) -> str:
+    name = str(card.get("name", "")).strip()
+    brand = str(card.get("brand", "")).strip()
+    price = card.get("price", "")
+    brand_prefix = f"{brand} " if brand and brand not in name else ""
+    return f"{brand_prefix}{name}（¥{format_price(price)}）"
+
+
+def format_price(value) -> str:
+    try:
+        price = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if price.is_integer():
+        return str(int(price))
+    return f"{price:.2f}".rstrip("0").rstrip(".")
+
+
+def clean_reason(reason: str) -> str:
+    text = " ".join(str(reason).split()).strip()
+    if not text:
+        return "它与当前检索条件相近。"
+    if text[-1] not in "。！？!?；;":
+        text += "。"
+    return text

@@ -96,6 +96,11 @@ def merge_semantic_plans(fallback: SemanticPlan, llm_plan: SemanticPlan) -> Sema
     intent = llm_plan.intent or fallback.intent
     if fallback.intent in {"cart", "compare", "bundle"}:
         intent = fallback.intent
+    if llm_plan.intent == "browse" and (
+        fallback.intent == "recommend"
+        or any(item.kind == "product_type" for item in fallback.filters)
+    ):
+        intent = fallback.intent
 
     return llm_plan.model_copy(
         update={

@@ -11,6 +11,7 @@ def main() -> None:
     documents = load_product_documents(settings.product_data_file)
     embedding_function, collection_name = build_chroma_embedding_function(
         use_ark_embedding=settings.use_ark_embedding,
+        embedding_api=settings.ark_embedding_api,
         api_key=settings.ark_api_key,
         base_url=settings.ark_base_url,
         model=settings.ark_embedding_model,

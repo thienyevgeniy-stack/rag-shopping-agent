@@ -1,6 +1,6 @@
 # 项目进度
 
-更新时间：2026-06-07
+更新时间：2026-06-08
 
 ## 已完成
 
@@ -72,6 +72,15 @@
 - [x] 性能压测报告：`docs/retrieval_benchmark_2026-06-07.md`
 - [x] 轻量多模态图片找货：Android 可选择图片，`/chat` 接收 base64 图片，后端基于商品主图视觉签名做同款/相似商品线索转换
 - [x] 场景化组合推荐：`ScenarioBundleHandler` 支持三亚度假、通勤、运动训练和通用组合方案，跨类目返回商品卡片
+- [x] 场景组合配置化：`data/scenario_bundles.json` 维护场景触发词、优先级、槽位、检索模板和过滤条件；代码层通过 `ScenarioCatalog` 校验加载，不再把新增场景写成 Python 分支
+- [x] 场景路由多信号化：`ScenarioCatalog` 综合 trigger terms、semantic terms、slot terms、product type overlap 和 plan intent 打分；product type/slot overlap 只能加分，不能单独把“推荐运动鞋”误判为整套运动方案
+- [x] 场景策略治理雏形：每个 bundle 支持 `status`、`rollout_percentage`、`owner`、`reviewed_at`，trace 会记录 bundle id、catalog version、confidence、signals、预算和选品结果
+- [x] 动态组合规划：slot 支持 `optional`、`min_budget`、`candidate_pool_size`、`budget_weight`、`match_terms`，可根据预算和用户表达裁剪槽位
+- [x] 组合级优化：新增 `BundleOptimizer`，在总预算、商品去重和槽位完整度约束下从每槽位候选池中选择组合，不再每槽位固定取 Top1
+- [x] 检索 pipeline 工程化：新增 `ProductRetrievalPipeline`，统一 store 预过滤召回、后处理过滤、去重、轻量 rerank 和 diagnostics；`ProductSearchTool` 收缩为卡片转换层
+- [x] 商品卡 evidence：`product_card` 增加后端可用的结构化 `evidence` 字段，记录商品 ID、品牌、价格、类目、类型和检索分数，为后续 citation/fact-check 做准备
+- [x] Citation/fact-check 雏形：`GroundingGuard` 返回商品级 citations，并优先使用 `product_card.evidence` 作为事实源；grounding 结果写入 trace metadata
+- [x] ESCI small 外部公开数据集接入：新增下载、转换、检索评测脚本，在 5549 商品 / 300 查询上完成 Recall@K、MRR@K、NDCG@K 和延迟评测
 - [x] 首 Token 优化与压测：推荐/组合链路先发即时 token，新增 `scripts/benchmark_first_token.py`
 - [x] 首 Token 压测报告：`docs/first_token_benchmark_2026-06-07.md`
 - [x] 生产配置隔离：`APP_ENV=production` 默认关闭 `/debug`，CORS 白名单、debug 开关、session/trace 容量通过环境变量配置
@@ -118,6 +127,7 @@
 - [x] 多模态回归：上传参考商品主图可返回 `image_analysis` 和对应商品卡片
 - [x] 场景组合回归：三亚度假方案返回防晒、穿搭、出行等组合槽位和商品卡片
 - [x] 首 Token 回归：本地 8001 服务 4 个典型场景 P95 首 token 约 318-342ms，低于 1s 阈值
+- [x] ESCI small 检索评测：Top10 Recall@K=0.4737、MRR@K=0.8714、NDCG@K=0.7406、P95 latency=51.89ms
 
 ## 当前状态
 
@@ -131,6 +141,7 @@ Android 真机 App
   -> MultimodalInputProcessor
   -> SemanticPlanner
   -> AgentWorkflow
+  -> ProductRetrievalPipeline
   -> JSON/Chroma 商品检索
   -> Doubao-Seed grounded answer
   -> GroundingGuard
@@ -149,7 +160,8 @@ Android 真机 App
 - [ ] 购物车已支持本地模拟闭环，但尚未接真实支付、地址或订单系统
 - [ ] 当前多模态是本地图片签名相似检索，适合 Demo；真实拍照找货仍需接 VLM/CLIP 类视觉语义模型
 - [ ] 首 Token 已有脚本和即时 token 优化；真实 LLM 开启后的首 Token 仍需在目标服务器上持续压测
-- [ ] `GroundingGuard` 已覆盖价格、优惠、库存、销量和绝对化表述；后续仍可扩展为逐句 citation/fact-check
+- [ ] `GroundingGuard` 已覆盖价格、优惠、库存、销量和绝对化表述；商品卡已携带结构化 `evidence` 并生成商品级 citations，后续仍需扩展为真正逐句 citation/fact-check
+- [ ] 策略治理目前是 JSON 配置 + trace metadata，尚未接配置后台、审批流、线上 A/B 平台或自动失败样例回流
 - [ ] 商品详情页仍是本地模拟页，尚未接真实电商落地页
 - [ ] session/cart 已支持 SQLite 和 Redis 后端；trace 仍是单进程内存态，生产多实例部署前应迁移到 Redis Stream、外部数据库或结构化日志系统
 
@@ -159,6 +171,6 @@ Android 真机 App
 2. 继续完善 taxonomy 覆盖面，把更多商品类型、品牌和功效词沉淀为可配置元数据，并为 taxonomy 变更建立索引重灌/回归提醒。
 3. 继续完善多轮查询改写，覆盖更多类目和偏好组合。
 4. 扩充离线评估集，覆盖更多类目、失败样例、长链多轮和购物车边界条件。
-5. 从 rerank、真实 VLM、真实 embedding 灌库回归或 Demo 录屏中选择 1 个方向深入实现。
+5. 基于现有 `ProductRetrievalPipeline` 深入实现更成熟的 hybrid retrieval/rerank，或从真实 VLM/CLIP、真实 embedding 灌库回归、配置后台/灰度平台、Demo 录屏中选择 1 个方向深入实现。
 6. 做 Demo 脚本和答辩截图/录屏材料。
 7. 后续如有真实商品落地页，再替换当前本地模拟页 URL。

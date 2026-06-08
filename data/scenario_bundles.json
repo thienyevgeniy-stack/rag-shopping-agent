@@ -1,0 +1,225 @@
+{
+  "version": "2026-06-08",
+  "bundles": [
+    {
+      "id": "sanya_trip",
+      "status": "active",
+      "rollout_percentage": 100,
+      "owner": "product",
+      "reviewed_at": "2026-06-08",
+      "priority": 100,
+      "trigger_terms": ["三亚", "海边", "度假", "旅游", "旅行"],
+      "semantic_terms": ["海岛", "沙滩", "热带", "防晒", "泳池", "酒店", "旅行穿搭", "出游"],
+      "title": "三亚度假组合方案",
+      "summary": "我把需求拆成防晒保护、轻便穿搭、舒适出行和拍照记录四个槽位。",
+      "slots": [
+        {
+          "label": "防晒保护",
+          "query_template": "三亚海边度假 高倍防晒 清爽 防水",
+          "filters": {
+            "keywords": ["防晒"],
+            "product_types": ["beauty.sunscreen"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.18,
+          "match_terms": ["防晒", "海边", "暴晒"]
+        },
+        {
+          "label": "轻便上衣",
+          "query_template": "三亚度假 速干 轻薄 透气 上衣",
+          "filters": {
+            "keywords": ["速干"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.2,
+          "match_terms": ["上衣", "穿搭", "速干", "轻薄"]
+        },
+        {
+          "label": "舒适出行",
+          "query_template": "三亚旅行 轻量 舒适 运动鞋",
+          "filters": {
+            "product_types": ["clothes.sports_shoes"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.32,
+          "match_terms": ["鞋", "出行", "走路", "舒适"]
+        },
+        {
+          "label": "拍照记录",
+          "query_template": "旅行拍照手机 影像 轻薄",
+          "filters": {
+            "keywords": ["拍照"],
+            "product_types": ["electronics.phone"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 3,
+          "budget_weight": 0.3,
+          "optional": true,
+          "min_budget": 3000,
+          "match_terms": ["拍照", "摄影", "影像", "记录", "手机"]
+        }
+      ]
+    },
+    {
+      "id": "commute",
+      "status": "active",
+      "rollout_percentage": 100,
+      "owner": "product",
+      "reviewed_at": "2026-06-08",
+      "priority": 80,
+      "trigger_terms": ["通勤", "上班", "办公室"],
+      "semantic_terms": ["出差", "上课", "上班族", "办公", "地铁", "公交", "日常携带"],
+      "title": "日常通勤组合方案",
+      "summary": "我按通勤舒适、办公效率和路上陪伴来搭配。",
+      "slots": [
+        {
+          "label": "通勤背包",
+          "query_template": "通勤 背包 轻便 多功能",
+          "filters": {
+            "keywords": ["背包"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.35,
+          "match_terms": ["包", "背包", "电脑包", "通勤"]
+        },
+        {
+          "label": "降噪耳机",
+          "query_template": "通勤 降噪 蓝牙耳机",
+          "filters": {
+            "product_types": ["electronics.headphones"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.25,
+          "match_terms": ["耳机", "降噪", "地铁", "通勤"]
+        },
+        {
+          "label": "轻办公设备",
+          "query_template": "轻薄 办公 平板 笔记本",
+          "filters": {
+            "keywords": ["办公"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 3,
+          "budget_weight": 0.4,
+          "optional": true,
+          "min_budget": 3000,
+          "match_terms": ["办公", "电脑", "平板", "笔记本"]
+        }
+      ]
+    },
+    {
+      "id": "sports_training",
+      "status": "active",
+      "rollout_percentage": 100,
+      "owner": "product",
+      "reviewed_at": "2026-06-08",
+      "priority": 80,
+      "trigger_terms": ["健身", "跑步装备", "运动套装", "训练计划"],
+      "semantic_terms": ["马拉松装备", "健身房", "训练清单", "陪跑", "运动清单"],
+      "title": "运动训练组合方案",
+      "summary": "我按鞋、裤、上衣和运动陪伴设备来组合。",
+      "slots": [
+        {
+          "label": "训练跑鞋",
+          "query_template": "训练 跑步 运动鞋 缓震",
+          "filters": {
+            "product_types": ["clothes.sports_shoes"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.45,
+          "match_terms": ["鞋", "跑步", "训练", "缓震"]
+        },
+        {
+          "label": "运动裤",
+          "query_template": "运动裤 训练 速干",
+          "filters": {
+            "product_types": ["clothes.sports_pants"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.2,
+          "match_terms": ["裤", "训练裤", "运动裤"]
+        },
+        {
+          "label": "速干上衣",
+          "query_template": "速干 透气 训练 上衣",
+          "filters": {
+            "keywords": ["速干"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.18,
+          "match_terms": ["上衣", "速干", "透气"]
+        },
+        {
+          "label": "运动耳机",
+          "query_template": "运动 蓝牙耳机 降噪",
+          "filters": {
+            "product_types": ["electronics.headphones"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 3,
+          "budget_weight": 0.17,
+          "optional": true,
+          "min_budget": 600,
+          "match_terms": ["耳机", "音乐", "陪跑", "降噪"]
+        }
+      ]
+    },
+    {
+      "id": "cross_category_bundle",
+      "status": "active",
+      "rollout_percentage": 100,
+      "owner": "product",
+      "reviewed_at": "2026-06-08",
+      "priority": 50,
+      "trigger_terms": ["搭配一套", "组合推荐", "一套方案", "购买方案", "全套"],
+      "semantic_terms": ["一整套", "清单", "方案", "配置", "搭配", "组合"],
+      "title": "跨类目组合方案",
+      "summary": "我先给你一套覆盖护理、穿搭和数码辅助的通用组合。",
+      "slots": [
+        {
+          "label": "基础护理",
+          "query_template": "{message} 护理 防晒 保湿",
+          "filters": {
+            "keywords": ["保湿"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.25,
+          "match_terms": ["护理", "防晒", "保湿"]
+        },
+        {
+          "label": "穿搭单品",
+          "query_template": "{message} 轻便 运动 穿搭",
+          "filters": {
+            "product_types": ["clothes.sports_shoes", "clothes.sports_pants"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.35,
+          "match_terms": ["穿搭", "运动", "鞋", "裤"]
+        },
+        {
+          "label": "数码辅助",
+          "query_template": "{message} 手机 耳机",
+          "filters": {
+            "product_types": ["electronics.phone", "electronics.headphones"]
+          },
+          "max_items": 1,
+          "candidate_pool_size": 4,
+          "budget_weight": 0.4,
+          "optional": true,
+          "min_budget": 800,
+          "match_terms": ["手机", "耳机", "数码", "拍照", "降噪"]
+        }
+      ]
+    }
+  ]
+}

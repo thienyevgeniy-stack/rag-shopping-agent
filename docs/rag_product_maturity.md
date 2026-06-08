@@ -1,6 +1,6 @@
 # RAG 产品成熟化设计
 
-更新时间：2026-06-07
+更新时间：2026-06-08
 
 本项目不只按课题 PDF 的最小链路推进，而是参考成熟 RAG / Agent 系统的共性做法，逐步把 Demo 改造成可持续扩展的产品架构。
 
@@ -131,6 +131,11 @@ Android App
 6. **Scenario Bundle**
    - 已加入 `ScenarioBundleHandler`，将“三亚度假/通勤/运动训练/搭配一套”等需求拆成多个商品槽位。
    - 每个槽位独立检索和过滤，再合并为组合方案，避免让 LLM 直接编一套不存在的商品组合。
+   - 场景定义已迁到 `data/scenario_bundles.json`，由 `ScenarioCatalog` 加载和校验；新增场景应走配置、评估样例和回归测试，而不是继续堆 Python 分支。
+   - 商品检索已收敛到 `ProductRetrievalPipeline`：store 预过滤召回、后处理过滤、去重、轻量 rerank 和 diagnostics 独立于 handler，便于后续替换为 hybrid retrieval 或外部 reranker。
+   - 场景路由已从纯 trigger term 升级为多信号打分：trigger terms、semantic terms、slot terms、product type overlap 和 plan intent 共同决定是否进入组合方案。
+   - 组合推荐已加入 `BundleOptimizer`，按总预算、去重和槽位完整度选择跨槽位商品，低预算下可以裁剪 optional slot。
+   - 策略治理目前落在 JSON 字段和 trace metadata：`status`、`rollout_percentage`、`owner`、`reviewed_at`、bundle id、catalog version、confidence、signals 和预算结果都会被记录。
 
 7. **Latency**
    - 推荐和组合链路先发即时 token，降低用户等待感。

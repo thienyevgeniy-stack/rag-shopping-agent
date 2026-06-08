@@ -17,6 +17,11 @@ import com.example.ragshoppingagent.model.Role
 @Composable
 fun MessageBubble(message: ChatMessage) {
     val isUser = message.role == Role.User
+    val displayText = if (!isUser && message.isThinking) {
+        "正在思考"
+    } else {
+        message.text.ifEmpty { " " }
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -28,7 +33,7 @@ fun MessageBubble(message: ChatMessage) {
             modifier = Modifier.fillMaxWidth(0.84f),
         ) {
             Text(
-                text = message.text.ifEmpty { " " },
+                text = displayText,
                 color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),

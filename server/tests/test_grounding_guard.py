@@ -18,6 +18,33 @@ def test_guard_allows_candidate_name_and_price() -> None:
 
     assert result.safe is True
     assert result.answer.startswith("推荐科颜氏")
+    assert result.citations == [
+        {"source": "product_catalog", "product_id": "p_beauty_021", "fields": ["name", "brand", "price"]}
+    ]
+
+
+def test_guard_uses_structured_evidence_as_fact_source() -> None:
+    card = {
+        **CARD,
+        "name": "展示层名称",
+        "price": 999.0,
+        "evidence": {
+            "source": "product_catalog",
+            "product_id": "p_beauty_021",
+            "name": "科颜氏牛油果保湿眼霜",
+            "brand": "科颜氏",
+            "price": 210.0,
+        },
+    }
+
+    result = guard_grounded_answer(
+        answer="推荐科颜氏牛油果保湿眼霜，价格210元。",
+        cards=[card],
+        fallback_answer="fallback",
+    )
+
+    assert result.safe is True
+    assert result.citations
 
 
 def test_guard_falls_back_on_unsupported_promotion() -> None:

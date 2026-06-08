@@ -5,6 +5,7 @@ import pytest
 
 from server.rag.vector_store import (
     ArkEmbeddingFunction,
+    ArkMultimodalEmbeddingFunction,
     ChromaStore,
     HashingEmbeddingFunction,
     LocalJsonVectorStore,
@@ -13,6 +14,7 @@ from server.rag.vector_store import (
     build_chroma_where,
     load_product_documents,
     parse_embedding_response,
+    parse_multimodal_embedding_response,
     product_type_filter_key,
     to_chroma_metadata,
 )
@@ -136,6 +138,39 @@ def test_chroma_collection_name_includes_index_schema_version() -> None:
     assert collection_name == "products_v2_metadata_filters"
 
 
+def test_chroma_collection_name_is_bounded_for_embedding_models() -> None:
+    _, collection_name = build_chroma_embedding_function(
+        use_ark_embedding=True,
+        api_key="test-key",
+        base_url="https://example.test",
+        model="doubao-embedding-text-240515-with-a-very-long-production-suffix",
+        timeout_seconds=1,
+        batch_size=1,
+        collection_name="esci_small_products",
+    )
+
+    assert len(collection_name) <= 63
+    assert collection_name[0].isalnum()
+    assert collection_name[-1].isalnum()
+
+
+def test_build_chroma_embedding_function_supports_multimodal_api() -> None:
+    embedder, collection_name = build_chroma_embedding_function(
+        use_ark_embedding=True,
+        embedding_api="multimodal",
+        api_key="test-key",
+        base_url="https://example.test",
+        model="ep-20260608193302-qztft",
+        timeout_seconds=1,
+        batch_size=1,
+        collection_name="esci_small_products",
+    )
+
+    assert isinstance(embedder, ArkMultimodalEmbeddingFunction)
+    assert "ark_multimodal" in collection_name
+    assert len(collection_name) <= 63
+
+
 def test_parse_embedding_response_orders_vectors_by_index() -> None:
     payload = {
         "data": [
@@ -174,6 +209,51 @@ def test_ark_embedding_function_calls_openai_compatible_endpoint() -> None:
     assert requests[0]["input"] == ["a", "bb"]
     assert requests[1]["input"] == ["ccc"]
     assert vectors == [[1.0, 0.0], [2.0, 1.0], [3.0, 0.0]]
+
+
+def test_ark_multimodal_embedding_function_calls_endpoint() -> None:
+    requests: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json_from_bytes(request.content)
+        requests.append(payload)
+        return httpx.Response(200, json={"data": {"embedding": [1.0, 0.5]}})
+
+    embedder = ArkMultimodalEmbeddingFunction(
+        api_key="test-key",
+        base_url="https://ark.example.test/api/v3",
+        model="ep-test",
+        batch_size=1,
+        transport=httpx.MockTransport(handler),
+    )
+
+    vectors = embedder(["running shoes"])
+
+    assert requests[0]["model"] == "ep-test"
+    assert requests[0]["input"] == [{"type": "text", "text": "running shoes"}]
+    assert vectors == [[1.0, 0.5]]
+
+
+def test_parse_multimodal_embedding_response_reads_embedding() -> None:
+    payload = {"data": {"embedding": [1, 0.25]}}
+
+    assert parse_multimodal_embedding_response(payload) == [1.0, 0.25]
+
+
+def test_ark_embedding_function_reports_http_errors() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": {"message": "model not found"}})
+
+    embedder = ArkEmbeddingFunction(
+        api_key="test-key",
+        base_url="https://ark.example.test/api/v3",
+        model="doubao-embedding-text-240515",
+        batch_size=1,
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(RuntimeError, match="ARK embedding request failed: HTTP 404"):
+        embedder(["ping"])
 
 
 def json_from_bytes(content: bytes) -> dict:

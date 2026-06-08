@@ -2,30 +2,42 @@ from pathlib import Path
 
 from server.inputs.base import ProcessedInput, TextProcessor
 from server.inputs.image_similarity import ProductImageSimilarityIndex
+from server.inputs.visual_embedding import ProductVisualEmbeddingIndex
 
 
 class MultimodalInputProcessor:
-    def __init__(self, product_data_path: Path, product_image_dir: Path) -> None:
+    def __init__(
+        self,
+        product_data_path: Path,
+        product_image_dir: Path,
+        visual_embedding_index: ProductVisualEmbeddingIndex | None = None,
+    ) -> None:
         self.text_processor = TextProcessor()
         self.visual_index = ProductImageSimilarityIndex(product_data_path, product_image_dir)
+        self.visual_embedding_index = visual_embedding_index
 
     def process(
         self,
         raw: str,
         image_base64: str = "",
+        image_bytes: bytes = b"",
         image_mime_type: str = "",
         image_filename: str = "",
     ) -> ProcessedInput:
         text = raw.strip()
-        if not image_base64.strip():
+        if not image_base64.strip() and not image_bytes:
             return self.text_processor.process(text)
 
-        matches = self.visual_index.match_base64_image(image_base64, top_k=3)
+        matches = self._match_image(
+            image_base64,
+            image_bytes=image_bytes,
+            image_mime_type=image_mime_type,
+        )
         if not matches:
-            fallback = text or "我想找图片里的同款或相似商品"
-            summary = "已收到图片，但当前商品库里没有找到足够相似的主图。"
+            fallback = text or "find visually similar products"
+            summary = "Image received, but the current catalog did not produce a reliable visual match."
             return ProcessedInput(
-                text=f"{fallback}\n图片线索：{summary}",
+                text=f"{fallback}\nImage signal: {summary}",
                 modality="image",
                 image_summary=summary,
                 visual_matches=[],
@@ -33,19 +45,20 @@ class MultimodalInputProcessor:
 
         best = matches[0]
         product_types = ", ".join(best.get("product_type_names", []))
+        match_source = best.get("visual_match_source", "signature")
         summary = (
-            f"上传图片最像商品“{best['name']}”，品牌 {best['brand']}，"
-            f"类目 {best['category']}"
+            f"Uploaded image visually matches {best['name']}, brand {best['brand']}, "
+            f"category {best['category']}"
         )
         if product_types:
-            summary += f"，商品类型 {product_types}"
-        summary += f"，视觉相似度 {best['similarity']:.2f}。"
+            summary += f", product type {product_types}"
+        summary += f", visual similarity {best['similarity']:.2f}, source {match_source}."
 
-        user_text = text or "我想找图片里的同款或相似商品"
+        user_text = text or "find the same or visually similar product from the image"
         visual_query = (
             f"{user_text}\n"
-            f"图片线索：{summary}\n"
-            f"优先检索同款或相似商品：{best['name']} {best['brand']} "
+            f"Image signal: {summary}\n"
+            f"Prioritize same or visually similar products: {best['name']} {best['brand']} "
             f"{best['category']} {' '.join(best.get('product_type_names', []))}"
         )
         return ProcessedInput(
@@ -54,3 +67,23 @@ class MultimodalInputProcessor:
             image_summary=summary,
             visual_matches=matches,
         )
+
+    def _match_image(self, image_base64: str, *, image_bytes: bytes, image_mime_type: str) -> list[dict]:
+        if self.visual_embedding_index and self.visual_embedding_index.available:
+            if image_bytes:
+                matches = self.visual_embedding_index.match_image_bytes(
+                    image_bytes,
+                    image_mime_type=image_mime_type or "image/jpeg",
+                    top_k=3,
+                )
+            else:
+                matches = self.visual_embedding_index.match_base64_image(
+                    image_base64,
+                    image_mime_type=image_mime_type or "image/jpeg",
+                    top_k=3,
+                )
+            if matches:
+                return matches
+        if image_bytes:
+            return self.visual_index.match_image_bytes(image_bytes, top_k=3)
+        return self.visual_index.match_base64_image(image_base64, top_k=3)

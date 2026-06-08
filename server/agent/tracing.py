@@ -22,6 +22,7 @@ class AgentTrace(BaseModel):
     comparison_product_ids: list[str] = Field(default_factory=list)
     cart_total_quantity: int | None = None
     token_chars: int = 0
+    metadata: dict = Field(default_factory=dict)
     duration_ms: float = 0.0
     started_at: float
     completed_at: float
@@ -61,6 +62,7 @@ def build_trace(
     filters: SearchFilters,
     events: list[dict],
     started_at: float,
+    metadata: dict | None = None,
 ) -> AgentTrace:
     completed_at = time.time()
     event_counts = Counter(item.get("event", "") for item in events)
@@ -95,6 +97,7 @@ def build_trace(
         comparison_product_ids=comparison_product_ids,
         cart_total_quantity=cart_total_quantity,
         token_chars=token_chars,
+        metadata=metadata or {},
         duration_ms=round((completed_at - started_at) * 1000, 2),
         started_at=started_at,
         completed_at=completed_at,

@@ -2,7 +2,7 @@
 
 ## 目标
 
-先完成可演示的最小闭环，再逐步增强多轮对话、反选、商品对比、购物车和多模态能力。
+保持可演示闭环稳定，同时把核心能力逐步迁到可配置、可测试、可替换的生产级链路：语义规划、工具执行、检索 pipeline、事实约束和状态持久化分层演进。
 
 ## 主链路
 
@@ -15,8 +15,10 @@ Android Compose
   -> AgentWorkflow
   -> Clarification/Cart/Compare/Scenario/Context/Recommendation Handler
   -> ToolRegistry.search_products
-  -> VectorStore
+  -> ProductRetrievalPipeline
+  -> VectorStore metadata prefilter
   -> PostProcessor
+  -> Dedupe/Rerank
   -> Doubao/Ark LLM 或模板 fallback
   -> GroundingGuard
   -> SSE token/guardrail/product_card/comparison_card/cart_update/done
@@ -36,12 +38,13 @@ Android Compose
 - `InputProcessor`：当前支持 `TextProcessor` 和 `MultimodalInputProcessor`；后续可增加 `ASRProcessor` 和真实 `VLMProcessor`。
 - `MultimodalInputProcessor`：当前支持图片 base64 输入，通过商品主图视觉签名做相似匹配，把图片转成可检索的文字线索；后续可替换为真实 VLM。
 - 输入模块边界：`inputs/base.py` 定义输入协议和文本处理，`inputs/image_similarity.py` 负责本地图片签名索引，`inputs/multimodal.py` 负责把图片线索并入文本查询，`inputs/processors.py` 只保留兼容导出。
+- `ProductRetrievalPipeline`：把商品检索拆成 store 预过滤召回、后处理过滤、去重、轻量 rerank 和 diagnostics。`ProductSearchTool` 只负责把命中转换成商品卡，后续接 BM25/向量混合召回、外部 reranker 或 AB 实验时不需要改 handler。
 - `PostProcessor`：当前有 `RangeFilter`、`ProductTypeFilter`、`KeywordFilter`、`ExclusionFilter`。即使 store 已经做 metadata 预过滤，后处理仍作为安全兜底，保证旧索引或 fallback 场景下结果正确。
 - `LLMClient`：当前支持 Ark OpenAI-compatible `/chat/completions` 流式接口；`USE_LLM=true` 且 `ARK_API_KEY` 存在时启用。
 - `StaticFiles`：当前通过 `/assets/products/{filename}` 服务参考集商品主图。
 - `Products API`：当前通过 `/products/{product_id}` 提供本地商品详情 HTML 页。
 - SSE 事件：当前支持 `token`、`image_analysis`、`guardrail`、`product_card`、`comparison_card`、`cart_update`、`done`
-- `ScenarioBundleHandler`：识别“三亚度假/通勤/运动训练/搭配一套”等场景，把需求拆成多个商品槽位，分别调用检索工具并返回组合方案。
+- `ScenarioCatalog`：场景组合由 `data/scenario_bundles.json` 维护，包括策略状态、灰度比例、负责人、审核日期、触发词、语义词、优先级、槽位、检索模板和结构化过滤条件。Catalog 会综合 trigger terms、semantic terms、slot terms、product type overlap 和 LLM/规则 plan intent 打分，避免只靠单个关键词命中。
 - `image_analysis` 事件：当用户上传图片时，返回后端识别到的相似商品摘要和候选匹配。
 
 ## Chroma 接入
@@ -74,6 +77,8 @@ python -m server.rag.ingest
 - 出现候选商品和用户预算以外的价格时降级。
 - 没有引用任何候选商品名称或品牌时降级。
 - 出现绝对化或医疗化承诺，如“保证”“根治”“100%”时降级。
+
+商品卡会携带结构化 `evidence`，包括商品 ID、名称、品牌、类目、类型、价格和检索分数。`GroundingGuard` 优先使用 `evidence` 作为事实源，缺失时再兼容旧商品卡字段，为后续逐句 citation/fact-check 留出接口。
 
 降级时会发送 `guardrail` SSE 事件并改用确定性模板回答，商品卡片仍来自 metadata。
 
@@ -176,7 +181,7 @@ Android 详情弹窗中的“打开链接”会跳转到该页面，用于满足
 
 ## 场景化组合推荐
 
-`ScenarioBundleHandler` 当前覆盖：
+`ScenarioBundleHandler` 不再把场景写死在 Python 里，而是加载 `data/scenario_bundles.json`。当前配置覆盖：
 
 - 三亚/海边/度假/旅行：防晒保护、轻便上衣、舒适出行、拍照记录。
 - 通勤/上班/办公室：通勤背包、降噪耳机、轻办公设备。
@@ -184,3 +189,7 @@ Android 详情弹窗中的“打开链接”会跳转到该页面，用于满足
 - 通用“搭配一套/组合推荐/全套”：护理、穿搭和数码辅助。
 
 每个槽位都复用结构化 `SearchFilters`，商品卡仍来自检索结果，不由模型编造。
+
+配置中的每个槽位包含 `query_template`、`filters` 和 `max_items`。例如通用组合方案会用 `{message}` 作为模板变量，把用户原话并入槽位检索；新增“露营/开学/新家”等场景时，只需要扩展 JSON 并补评估样例。
+
+组合执行时不会再机械地“每个槽位取第一个商品”。`ScenarioBundleHandler` 会为每个槽位取候选池，交给 `BundleOptimizer` 在总预算、商品去重和槽位完整度之间做选择；低预算下可裁剪 optional slot，例如三亚方案中的“拍照记录”会在预算不足或用户未提及时被跳过。策略命中的 bundle id、catalog version、confidence、signals、预算与选品结果会写入 trace metadata，用于后续失败样例回流、灰度分析和策略复盘。

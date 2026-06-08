@@ -17,6 +17,9 @@ class ProductImageSimilarityIndex:
         image_bytes = decode_base64_image(image_base64)
         if not image_bytes:
             return []
+        return self.match_image_bytes(image_bytes, top_k=top_k)
+
+    def match_image_bytes(self, image_bytes: bytes, top_k: int = 3) -> list[dict]:
         try:
             query_signature = image_signature(image_bytes)
         except (OSError, UnidentifiedImageError):

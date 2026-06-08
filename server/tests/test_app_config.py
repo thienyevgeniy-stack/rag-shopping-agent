@@ -61,6 +61,13 @@ def test_create_session_store_uses_memory_backend_by_default() -> None:
     assert isinstance(store, SessionStore)
 
 
+def test_settings_resolves_scenario_bundle_path(tmp_path) -> None:
+    scenario_path = tmp_path / "bundles.json"
+    settings = Settings(_env_file=None, scenario_bundle_path=str(scenario_path))
+
+    assert settings.scenario_bundle_file == scenario_path
+
+
 def test_create_session_store_uses_sqlite_backend(tmp_path) -> None:
     settings = Settings(
         _env_file=None,

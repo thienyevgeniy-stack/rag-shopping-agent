@@ -29,6 +29,13 @@ class FakePlanningLLM:
         yield '"needs_search":false,"confidence":0.91}'
 
 
+class FakeBrowsePlanningLLM:
+    async def stream_messages(self, messages: list[dict]) -> AsyncIterator[str]:
+        yield '{"intent":"browse","cart_action":"none","reference_type":"none",'
+        yield '"reference_text":"","quantity":null,"query":"热门好物","filters":[],'
+        yield '"needs_search":true,"confidence":0.93}'
+
+
 def make_session() -> SessionState:
     session = SessionState(session_id="pytest-semantic")
     session.candidate_product_cards = [PRODUCT_CARD, SECOND_CARD]
@@ -78,3 +85,14 @@ def test_semantic_planner_can_use_llm_json_plan() -> None:
     assert plan.reference_type == "brand"
     assert plan.reference_text == "AHC"
     assert plan.quantity == 2
+
+
+def test_semantic_planner_does_not_downgrade_explicit_product_request_to_browse() -> None:
+    async def _run():
+        return await SemanticPlanner(FakeBrowsePlanningLLM()).plan("推荐一款运动鞋", make_session())
+
+    plan = asyncio.run(_run())
+    values = [(item.kind, item.value) for item in plan.filters]
+
+    assert plan.intent == "recommend"
+    assert ("product_type", "clothes.sports_shoes") in values
