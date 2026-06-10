@@ -1,10 +1,15 @@
 param(
-    [string]$TargetDir = "D:\RAG\data_external\esci",
+    [string]$TargetDir = "",
     [string]$RepoUrl = "https://github.com/amazon-science/esci-data.git"
 )
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+if (-not $TargetDir) {
+    $TargetDir = Join-Path $repoRoot "data_external\esci"
+}
 
 $repoDir = Join-Path $TargetDir "esci-data"
 New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null

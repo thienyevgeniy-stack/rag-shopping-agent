@@ -21,14 +21,14 @@
 本地 fallback：
 
 ```powershell
-cd D:\RAG
+cd <repo>
 python scripts\benchmark_retrieval.py --store local --sizes 50000 --runs 1 --warmup 1 --top-k 5 --output docs\retrieval_benchmark_2026-06-07-local-50k-r1.json
 ```
 
 Chroma：
 
 ```powershell
-cd D:\RAG
+cd <repo>
 python scripts\benchmark_retrieval.py --store chroma --sizes 1000 --runs 1 --warmup 0 --top-k 5 --output docs\retrieval_benchmark_2026-06-07-chroma-1k.json
 ```
 

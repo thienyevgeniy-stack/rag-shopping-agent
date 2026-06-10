@@ -2,6 +2,37 @@
 
 本仓库用于课题 Demo：用原生 Android 客户端、FastAPI 后端和 RAG 检索链路，构建一个可流式对话、可展示商品卡片的电商导购 Agent。
 
+## 评委快速体验
+
+完整部署、后端体验、Android 真机联调和常见问题见 [docs/deployment_and_demo.md](docs/deployment_and_demo.md)。
+
+最短本地后端启动：
+
+```powershell
+git clone https://github.com/thienyevgeniy-stack/rag-shopping-agent.git
+cd rag-shopping-agent
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r server\requirements.txt
+copy .env.example .env
+.\scripts\run_server.ps1
+```
+
+启动后打开：
+
+```text
+http://127.0.0.1:8000/health
+http://127.0.0.1:8000/admin
+```
+
+Android 真机演示时，保持后端运行，并执行：
+
+```powershell
+adb reverse tcp:8000 tcp:8000
+```
+
+然后在 Android Studio 打开 `client/` 并运行 `app`。
+
 ## 当前状态
 
 - 已搭建 monorepo 结构：`client/`、`server/`、`docs/`、`data/`、`scripts/`
@@ -44,7 +75,7 @@
 ## 后端快速启动
 
 ```powershell
-cd D:\RAG
+cd <repo>
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r server\requirements.txt
@@ -55,21 +86,21 @@ copy .env.example .env
 后端测试：
 
 ```powershell
-cd D:\RAG
+cd <repo>
 .\scripts\test_backend.ps1
 ```
 
 离线评估：
 
 ```powershell
-cd D:\RAG
+cd <repo>
 python scripts\evaluate_agent.py
 ```
 
 检索性能压测：
 
 ```powershell
-cd D:\RAG
+cd <repo>
 python scripts\benchmark_retrieval.py --store local --sizes 50000 --runs 1 --warmup 1 --top-k 5 --output docs\retrieval_benchmark_2026-06-07-local-50k-r1.json
 python scripts\benchmark_retrieval.py --store chroma --sizes 1000 --runs 1 --warmup 0 --top-k 5 --output docs\retrieval_benchmark_2026-06-07-chroma-1k.json
 ```
@@ -77,7 +108,7 @@ python scripts\benchmark_retrieval.py --store chroma --sizes 1000 --runs 1 --war
 首 Token 延迟压测：
 
 ```powershell
-cd D:\RAG
+cd <repo>
 python scripts\benchmark_first_token.py --url http://127.0.0.1:8000/chat --runs 3 --warmup 1 --threshold-ms 1000 --output docs\first_token_benchmark_2026-06-07.json
 ```
 
@@ -90,7 +121,7 @@ Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8000/debug/traces?limit=5"
 灌入 Chroma 向量库（可选；未启用时默认使用 JSON fallback）：
 
 ```powershell
-cd D:\RAG
+cd <repo>
 pip install -r server\requirements.txt
 python -m server.rag.ingest
 ```
@@ -98,7 +129,7 @@ python -m server.rag.ingest
 抽取参考集商品主图：
 
 ```powershell
-cd D:\RAG
+cd <repo>
 python scripts\extract_ref_images.py
 ```
 

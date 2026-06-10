@@ -5,7 +5,7 @@
 ## 数据来源
 
 - 官方仓库：`https://github.com/amazon-science/esci-data`
-- 本地原始目录：`D:\RAG\data_external\esci\esci-data\shopping_queries_dataset`
+- 本地原始目录：`<repo>\data_external\esci\esci-data\shopping_queries_dataset`
 - 原始文件：
   - `shopping_queries_dataset_examples.parquet`：48.91 MB
   - `shopping_queries_dataset_products.parquet`：1057.49 MB
@@ -19,7 +19,7 @@
 python scripts\prepare_esci_small.py --max-queries 300 --max-products 12000 --locale us
 ```
 
-输出目录：`D:\RAG\data\benchmarks\esci_small`
+输出目录：`<repo>\data\benchmarks\esci_small`
 
 - 商品数：5549
 - 查询数：300

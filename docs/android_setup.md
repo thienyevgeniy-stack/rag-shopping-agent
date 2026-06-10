@@ -10,7 +10,7 @@
 可先运行：
 
 ```powershell
-cd D:\RAG
+cd <repo>
 .\scripts\check_android_env.ps1
 ```
 
@@ -19,7 +19,7 @@ cd D:\RAG
 打开目录：
 
 ```text
-D:\RAG\client
+<repo>\client
 ```
 
 等待 Gradle Sync 完成后，选择真机运行。真机推荐使用 USB 反向代理：
@@ -35,7 +35,7 @@ http://127.0.0.1:8000
 1. 启动后端：
 
 ```powershell
-cd D:\RAG
+cd <repo>
 .\scripts\run_server.ps1
 ```
 

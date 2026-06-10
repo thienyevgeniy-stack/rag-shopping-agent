@@ -16,7 +16,7 @@
 ## 复跑命令
 
 ```powershell
-cd D:\RAG
+cd <repo>
 python scripts\benchmark_first_token.py --url http://127.0.0.1:8001/chat --runs 3 --warmup 1 --threshold-ms 1000 --output docs\first_token_benchmark_2026-06-07.json
 ```
 

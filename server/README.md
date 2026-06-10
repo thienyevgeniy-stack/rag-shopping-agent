@@ -5,7 +5,7 @@ FastAPI backend for the RAG shopping assistant.
 ## Run
 
 ```powershell
-cd D:\RAG
+cd <repo>
 pip install -r server\requirements.txt
 .\scripts\run_server.ps1
 ```
