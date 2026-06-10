@@ -8,7 +8,6 @@
 https://github.com/thienyevgeniy-stack/rag-shopping-agent
 ```
 
-
 ## 1. 体验方式总览
 
 推荐优先使用本地真机演示方式：
