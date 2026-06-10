@@ -8,6 +8,7 @@
 https://github.com/thienyevgeniy-stack/rag-shopping-agent
 ```
 
+
 ## 1. 体验方式总览
 
 推荐优先使用本地真机演示方式：
@@ -347,10 +348,6 @@ adb reverse --list
 ```powershell
 curl http://127.0.0.1:8000/health
 ```
-
-### GitHub 上看到历史本机路径
-
-固定盘符形式的路径是开发机本地路径。公开文档中应使用 `<repo>` 或仓库根目录描述；测试里的 `http://127.0.0.1:8000` 是本地服务地址，属于正常演示配置，不需要改。
 
 ### 没有 API Key 是否能演示
 
