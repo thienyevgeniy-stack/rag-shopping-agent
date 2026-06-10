@@ -26,7 +26,7 @@
 - [x] 后端 pytest 测试
 - [x] 后端联调测试脚本
 - [x] Android 环境检查脚本
-- [x] README、架构文档、API 文档、Demo 脚本
+- [x] README、架构文档、API 文档、部署体验指南
 - [x] Android Studio、Android SDK、Platform Tools、API 35 安装到 D 盘
 - [x] 真机识别与 `adb reverse tcp:8000 tcp:8000`
 - [x] 真机端到端 Demo 跑通：输入推荐需求后返回 PureLab 商品卡片
@@ -172,5 +172,5 @@ Android 真机 App
 3. 继续完善多轮查询改写，覆盖更多类目和偏好组合。
 4. 扩充离线评估集，覆盖更多类目、失败样例、长链多轮和购物车边界条件。
 5. 基于现有 `ProductRetrievalPipeline` 深入实现更成熟的 hybrid retrieval/rerank，或从真实 VLM/CLIP、真实 embedding 灌库回归、配置后台/灰度平台、Demo 录屏中选择 1 个方向深入实现。
-6. 做 Demo 脚本和答辩截图/录屏材料。
+6. 整理答辩截图/录屏材料。
 7. 后续如有真实商品落地页，再替换当前本地模拟页 URL。

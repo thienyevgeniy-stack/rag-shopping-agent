@@ -66,7 +66,7 @@ adb reverse tcp:8000 tcp:8000
 ├── client/                  # Android Kotlin + Jetpack Compose
 ├── server/                  # FastAPI 后端与 RAG/Agent 模块
 ├── data/                    # 示例商品数据
-├── docs/                    # 架构、接口、演示脚本
+├── docs/                    # 架构、接口、部署体验文档
 ├── scripts/                 # 本地启动脚本
 ├── .env.example             # 环境变量示例
 └── README.md
