@@ -11,12 +11,15 @@
 ```powershell
 git clone https://github.com/thienyevgeniy-stack/rag-shopping-agent.git
 cd rag-shopping-agent
-python -m venv .venv
+py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip setuptools wheel
 pip install -r server\requirements.txt
 copy .env.example .env
 .\scripts\run_server.ps1
 ```
+
+推荐使用 Python 3.11 或 3.12。Windows 上不建议使用 Python 3.13 / 3.14，否则部分原生依赖可能触发本地编译并报 `link.exe not found`。完整说明见 [docs/deployment_and_demo.md](docs/deployment_and_demo.md)。
 
 启动后打开：
 

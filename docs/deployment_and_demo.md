@@ -36,8 +36,10 @@ Android 真机 App
 后端：
 
 - Windows 10/11、macOS 或 Linux
-- Python 3.10+
+- Python 3.10 - 3.12，推荐 Python 3.11 或 3.12
 - Git
+
+Windows 上不建议使用 Python 3.13 / 3.14。当前依赖中包含 `pydantic-core`、`Pillow`、`chroma-hnswlib`、`tokenizers` 等原生扩展包；如果 Python 版本过新，pip 可能找不到预编译 wheel，从而尝试本地编译并报 `link.exe not found`。
 
 Android 客户端：
 
@@ -79,9 +81,38 @@ cd rag-shopping-agent
 Windows PowerShell：
 
 ```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip setuptools wheel
+pip install -r server\requirements.txt
+Copy-Item .env.example .env
+.\scripts\run_server.ps1
+```
+
+如果本机没有 Python 3.11，也可以使用 Python 3.12：
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip setuptools wheel
+pip install -r server\requirements.txt
+Copy-Item .env.example .env
+.\scripts\run_server.ps1
+```
+
+如果不确定本机有哪些 Python 版本，可先运行：
+
+```powershell
+py -0p
+```
+
+如果没有安装 Python Launcher，也可使用 `python` 命令，但请先确认版本是 3.10 - 3.12：
+
+```powershell
+python --version
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+python -m pip install --upgrade pip setuptools wheel
 pip install -r server\requirements.txt
 Copy-Item .env.example .env
 .\scripts\run_server.ps1
@@ -456,6 +487,34 @@ adb reverse --list
 ```powershell
 curl http://127.0.0.1:8000/health
 ```
+
+### pip 安装依赖时报 `link.exe not found`
+
+如果 Windows 上安装依赖时出现类似错误：
+
+```text
+error: linker `link.exe` not found
+Failed to build Pillow chroma-hnswlib pydantic-core tokenizers
+Python reports SOABI: cp314-win_amd64
+Found CPython 3.14
+```
+
+通常不是项目代码问题，而是当前虚拟环境使用了 Python 3.13 / 3.14，部分依赖没有对应 Windows 预编译 wheel，pip 被迫尝试本地编译；本机又没有 Visual Studio C++ Build Tools，所以失败。
+
+推荐做法是删除虚拟环境，改用 Python 3.11 或 3.12 重新安装：
+
+```powershell
+cd <repo>
+deactivate 2>$null
+Remove-Item -Recurse -Force .venv
+py -0p
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip setuptools wheel
+pip install -r server\requirements.txt
+```
+
+如果 `py -3.11` 不存在，请先安装 Python 3.11 x64 或 Python 3.12 x64。不要优先走“安装 Rust + Visual Studio Build Tools 后本地编译所有依赖”的路线；那会显著增加评审和协作部署复杂度。
 
 ### 没有 API Key 是否能演示
 
