@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -70,6 +71,13 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @field_validator("enable_debug_api", "enable_admin_console", mode="before")
+    @classmethod
+    def blank_optional_bool_to_none(cls, value):
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
 
     @property
     def product_data_file(self) -> Path:

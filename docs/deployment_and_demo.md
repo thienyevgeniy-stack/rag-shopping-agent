@@ -516,6 +516,29 @@ pip install -r server\requirements.txt
 
 如果 `py -3.11` 不存在，请先安装 Python 3.11 x64 或 Python 3.12 x64。不要优先走“安装 Rust + Visual Studio Build Tools 后本地编译所有依赖”的路线；那会显著增加评审和协作部署复杂度。
 
+### 启动时报 `enable_debug_api` 布尔值解析失败
+
+如果启动服务时报：
+
+```text
+ValidationError: enable_debug_api
+Input should be a valid boolean, unable to interpret input
+```
+
+通常是本地 `.env` 来自旧版本模板，里面保留了空值：
+
+```env
+ENABLE_DEBUG_API=
+```
+
+处理方式任选其一：
+
+```env
+ENABLE_DEBUG_API=true
+```
+
+或直接删除这一行，让开发环境使用默认值。新版后端也会把空字符串按“未设置”处理，但仍建议本地 `.env` 使用明确的 `true` / `false`，便于排查。
+
 ### 没有 API Key 是否能演示
 
 可以。默认 `.env.example` 中 `USE_LLM=false`、`USE_CHROMA=false`，后端会使用本地商品 JSON 和规则/模板 fallback 完成基本导购闭环。

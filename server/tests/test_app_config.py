@@ -16,6 +16,15 @@ def test_production_settings_disable_debug_api_by_default() -> None:
     assert settings.debug_api_enabled is False
 
 
+def test_blank_optional_debug_flags_are_treated_as_unset() -> None:
+    settings = Settings(_env_file=None, app_env="development", enable_debug_api="", enable_admin_console="")
+
+    assert settings.enable_debug_api is None
+    assert settings.enable_admin_console is None
+    assert settings.debug_api_enabled is True
+    assert settings.admin_console_enabled is True
+
+
 def test_create_app_omits_debug_routes_in_production() -> None:
     app = create_app(Settings(_env_file=None, app_env="production", enable_debug_api=None))
 
