@@ -6,6 +6,7 @@ from server.agent.semantic_schema import SemanticPlan
 
 DEFAULT_RECOMMENDATION_TOP_K = 5
 DEFAULT_LISTING_TOP_K = 20
+DEFAULT_SINGLE_RECOMMENDATION_MAX_CARDS = 3
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,7 @@ class ProductDiscoveryPolicy:
     top_k: int = DEFAULT_RECOMMENDATION_TOP_K
     allow_llm_answer: bool = True
     bind_cards_to_answer: bool = True
+    max_cards: int | None = None
     policy_reasons: tuple[str, ...] = ()
 
     def as_metadata(self) -> dict[str, object]:
@@ -22,6 +24,7 @@ class ProductDiscoveryPolicy:
             "top_k": self.top_k,
             "allow_llm_answer": self.allow_llm_answer,
             "bind_cards_to_answer": self.bind_cards_to_answer,
+            "max_cards": self.max_cards,
             "policy_reasons": list(self.policy_reasons),
         }
 
@@ -49,6 +52,7 @@ def build_product_discovery_policy(plan: SemanticPlan) -> ProductDiscoveryPolicy
             top_k=DEFAULT_RECOMMENDATION_TOP_K,
             allow_llm_answer=True,
             bind_cards_to_answer=True,
+            max_cards=DEFAULT_SINGLE_RECOMMENDATION_MAX_CARDS,
             policy_reasons=("single_product_discovery",),
         )
     return ProductDiscoveryPolicy(policy_reasons=("default_product_discovery",))
@@ -63,23 +67,32 @@ def resolve_product_cards_for_answer(
     ordered_cards = order_cards_by_answer_mentions(answer, cards)
     binding = bind_cards_to_answer(answer, ordered_cards)
     if not policy.bind_cards_to_answer:
+        emitted_cards = limit_product_cards(ordered_cards, policy.max_cards)
         return ProductCardResolution(
-            cards=ordered_cards,
+            cards=emitted_cards,
             metadata={
                 "reason": "policy_keeps_filtered_cards",
                 "answer_product_ids": binding.answer_product_ids,
-                "emitted_product_ids": product_ids(ordered_cards),
-                "dropped_product_ids": [],
+                "emitted_product_ids": product_ids(emitted_cards),
+                "dropped_product_ids": product_ids(ordered_cards[len(emitted_cards) :]),
+                "max_cards": policy.max_cards,
             },
         )
+    emitted_cards = limit_product_cards(binding.cards, policy.max_cards)
+    dropped_by_limit = [
+        str(card.get("id", ""))
+        for card in binding.cards[len(emitted_cards) :]
+        if str(card.get("id", "")).strip()
+    ]
     return ProductCardResolution(
-        cards=binding.cards,
+        cards=emitted_cards,
         metadata={
             "reason": binding.reason,
             "answer_product_ids": binding.answer_product_ids,
-            "emitted_product_ids": product_ids(binding.cards),
-            "dropped_product_ids": binding.dropped_product_ids,
-            "card_binding_mismatch": bool(binding.dropped_product_ids),
+            "emitted_product_ids": product_ids(emitted_cards),
+            "dropped_product_ids": [*binding.dropped_product_ids, *dropped_by_limit],
+            "max_cards": policy.max_cards,
+            "card_binding_mismatch": bool(binding.dropped_product_ids or dropped_by_limit),
         },
     )
 
@@ -121,3 +134,9 @@ def coerce_top_k(value, default: int) -> int:
 
 def product_ids(cards: list[dict]) -> list[str]:
     return [str(card.get("id", "")) for card in cards]
+
+
+def limit_product_cards(cards: list[dict], max_cards: int | None) -> list[dict]:
+    if max_cards is None:
+        return cards
+    return cards[: max(0, int(max_cards))]

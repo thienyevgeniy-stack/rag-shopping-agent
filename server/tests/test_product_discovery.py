@@ -30,6 +30,7 @@ def test_single_policy_allows_llm_and_answer_card_binding() -> None:
     assert policy.top_k == 5
     assert policy.allow_llm_answer is True
     assert policy.bind_cards_to_answer is True
+    assert policy.max_cards == 3
 
 
 def test_listing_resolution_keeps_all_filtered_cards_even_if_answer_mentions_first() -> None:
@@ -68,6 +69,26 @@ def test_single_resolution_binds_cards_to_answer_mentions() -> None:
     assert [card["id"] for card in result.cards] == ["beta"]
     assert result.metadata["reason"] == "answer_product_mentions"
     assert result.metadata["dropped_product_ids"] == ["alpha"]
+
+
+def test_single_resolution_limits_unmentioned_candidates_to_three_cards() -> None:
+    cards = [
+        {"id": "alpha", "name": "Alpha Running Shoe", "brand": "Alpha"},
+        {"id": "beta", "name": "Beta Running Shoe", "brand": "Beta"},
+        {"id": "gamma", "name": "Gamma Running Shoe", "brand": "Gamma"},
+        {"id": "delta", "name": "Delta Running Shoe", "brand": "Delta"},
+    ]
+    policy = build_product_discovery_policy(SemanticPlan(intent="recommend", presentation_mode="single"))
+
+    result = resolve_product_cards_for_answer(
+        answer="我会优先推荐这款，先给你一个稳妥选择。",
+        cards=cards,
+        policy=policy,
+    )
+
+    assert [card["id"] for card in result.cards] == ["alpha", "beta", "gamma"]
+    assert result.metadata["max_cards"] == 3
+    assert result.metadata["dropped_product_ids"] == ["delta"]
 
 
 def test_single_resolution_suppresses_cards_when_answer_declines_recommendation() -> None:

@@ -210,6 +210,38 @@ def test_chat_compare_returns_comparison_card() -> None:
     assert "我先基于当前商品库做对比" in collect_token_text(response.text)
 
 
+def test_chat_compare_explicit_brands_clears_stale_product_scope() -> None:
+    session_id = f"pytest-compare-reset-{uuid4()}"
+    first = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "推荐一款1000元以上的运动鞋",
+        },
+    )
+    second = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "科颜氏和AHC哪个更适合干皮",
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert "event: comparison_card" in second.text
+    cards = collect_event_payloads(second.text, "product_card")
+    brands = {card["brand"] for card in cards}
+    assert {"科颜氏", "AHC"} <= brands
+
+    done = collect_event_payloads(second.text, "done")[0]
+    filters = {(item["kind"], item["value"]) for item in done["filters"]}
+    assert ("product_type", "clothes.sports_shoes") not in filters
+    assert ("min_price", "1000") not in filters
+    assert ("brand", "科颜氏") in filters
+    assert ("brand", "AHC") in filters
+
+
 def test_chat_cart_update_after_product_recommendation() -> None:
     session_id = f"pytest-cart-api-{uuid4()}"
     first = client.post(
@@ -495,6 +527,28 @@ def test_chat_budget_sports_shoes_returns_only_shoe_cards() -> None:
     assert any(item["kind"] == "product_type" and item["value"] == "clothes.sports_shoes" for item in done["filters"])
 
 
+def test_chat_single_min_price_sports_shoe_returns_aligned_grounded_cards() -> None:
+    session_id = f"pytest-single-min-price-shoes-{uuid4()}"
+    response = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "推荐一款1000元以上的运动鞋",
+        },
+    )
+
+    text = collect_token_text(response.text)
+    cards = collect_event_payloads(response.text, "product_card")
+    done = collect_event_payloads(response.text, "done")[0]
+
+    assert response.status_code == 200
+    assert 1 <= len(cards) <= 3
+    assert all("clothes.sports_shoes" in card["product_types"] for card in cards)
+    assert all(card["price"] >= 1000 for card in cards)
+    assert all(card["name"] in text for card in cards)
+    assert any(item["kind"] == "min_price" and item["value"] == "1000" for item in done["filters"])
+
+
 def test_chat_same_product_type_new_request_releases_stale_budget() -> None:
     session_id = f"pytest-sports-shoes-release-budget-{uuid4()}"
     first = client.post(
@@ -586,6 +640,40 @@ def test_chat_follow_up_excludes_lining_alias_and_refreshes_product_cards() -> N
     assert all(card["brand"] != "\u674e\u5b81" for card in second_cards)
     assert any(
         item["kind"] == "exclude_brand" and item["value"] == "\u674e\u5b81"
+        for item in done["filters"]
+    )
+
+
+def test_chat_follow_up_excludes_chinese_brand_and_refreshes_product_cards() -> None:
+    session_id = f"pytest-xtep-exclusion-{uuid4()}"
+    first = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "\u63a8\u8350\u51e0\u6b3e\u8fd0\u52a8\u978b",
+        },
+    )
+    second = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "\u6211\u4e0d\u60f3\u8981\u7279\u6b65\u54c1\u724c",
+        },
+    )
+
+    first_cards = collect_event_payloads(first.text, "product_card")
+    second_cards = collect_event_payloads(second.text, "product_card")
+    second_text = collect_token_text(second.text)
+    done = collect_event_payloads(second.text, "done")[0]
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert any(card["brand"] == "\u7279\u6b65" for card in first_cards)
+    assert second_cards
+    assert all(card["brand"] != "\u7279\u6b65" for card in second_cards)
+    assert "\u4f60\u8bf4\u7684\u662f \u7279\u6b65" not in second_text
+    assert any(
+        item["kind"] == "exclude_brand" and item["value"] == "\u7279\u6b65"
         for item in done["filters"]
     )
 

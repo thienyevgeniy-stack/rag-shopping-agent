@@ -5,6 +5,23 @@ from server.agent.semantic_schema import SemanticPlan
 from server.session.state import FilterCondition, SessionState, product_scope_values
 
 
+PRODUCT_SCOPE_RESET_FIELDS = (
+    "filters",
+    "exclusions",
+    "candidate_products",
+    "candidate_product_cards",
+    "pending_subject",
+    "pending_cart_action",
+)
+
+EXPLICIT_COMPARE_ENTITY_FILTER_KINDS = {
+    "brand",
+    "preferred_brand",
+    "product_type",
+    "category",
+}
+
+
 ScopeTransitionType = Literal[
     "continue_refinement",
     "replace_product_scope",
@@ -70,6 +87,16 @@ class ScopeTransitionPolicy:
             )
 
         if plan.intent == "compare":
+            if self._compare_starts_new_explicit_scope(plan, session, incoming_filters):
+                return ScopeTransition(
+                    transition_type="compare_scope",
+                    reason="explicit comparison entities are not covered by current candidate context",
+                    confidence=0.9,
+                    reset_fields=PRODUCT_SCOPE_RESET_FIELDS,
+                    incoming_scope_values=incoming_scopes,
+                    existing_scope_values=existing_scopes,
+                    seed_product_ids=seed_ids,
+                )
             return ScopeTransition(
                 transition_type="compare_scope",
                 reason="comparison turns preserve current candidate context",
@@ -223,11 +250,59 @@ class ScopeTransitionPolicy:
         if transition.transition_type in {"replace_product_scope", "bundle_new_task"}:
             session.reset_product_scope()
             return
+        if transition.transition_type == "compare_scope" and transition.reset_fields:
+            session.reset_product_scope()
+            return
         if transition.transition_type == "bundle_with_seed":
             session.clear_product_constraints()
             return
         if transition.transition_type in {"refine_product_scope", "expand_product_scope"}:
             session.clear_product_candidates()
+
+    def _compare_starts_new_explicit_scope(
+        self,
+        plan: SemanticPlan,
+        session: SessionState,
+        incoming_filters: list[FilterCondition],
+    ) -> bool:
+        if plan.reference_type != "none":
+            return False
+        if not session.has_product_scoped_state():
+            return False
+
+        explicit_entities = [
+            item
+            for item in incoming_filters
+            if item.kind in EXPLICIT_COMPARE_ENTITY_FILTER_KINDS and item.value.strip()
+        ]
+        if not explicit_entities:
+            return False
+
+        brand_values = [
+            item.value
+            for item in explicit_entities
+            if item.kind in {"brand", "preferred_brand"}
+        ]
+        if brand_values and self._candidate_cards_cover_brands(session, brand_values):
+            return False
+
+        incoming_scopes = tuple(product_scope_values(incoming_filters))
+        existing_scopes = tuple(product_scope_values(session.filters))
+        if incoming_scopes and existing_scopes and set(incoming_scopes) == set(existing_scopes):
+            return False
+
+        return True
+
+    def _candidate_cards_cover_brands(self, session: SessionState, brand_values: list[str]) -> bool:
+        if not brand_values or not session.candidate_product_cards:
+            return False
+
+        available = {
+            _normalize_entity(str(card.get("brand", "")))
+            for card in session.candidate_product_cards
+            if card.get("brand")
+        }
+        return bool(available) and all(_normalize_entity(value) in available for value in brand_values)
 
     def _is_seeded_bundle(self, message: str, plan: SemanticPlan, session: SessionState) -> bool:
         if not session.candidate_product_cards and not session.candidate_products:
@@ -333,6 +408,10 @@ def _parse_scope(scope: str) -> tuple[str, str]:
 
 def _root_namespace(value: str) -> str:
     return value.split(".", 1)[0] if "." in value else ""
+
+
+def _normalize_entity(value: str) -> str:
+    return value.strip().casefold()
 
 
 def infer_scope_name(scope_values: tuple[str, ...]) -> str:

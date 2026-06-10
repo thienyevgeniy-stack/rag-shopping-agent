@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from server.agent.planning_policy import validate_semantic_plan
 from server.agent.semantic_llm import SemanticPlanner, build_semantic_plan_messages, extract_json_object
 from server.agent.semantic_rules import build_rule_plan
-from server.agent.semantic_schema import SemanticFilter, SemanticPlan
+from server.agent.semantic_schema import SemanticConstraint, SemanticFilter, SemanticPlan
 from server.session.state import SessionState
 
 
@@ -332,6 +332,37 @@ def test_rule_plan_uses_catalog_aliases_for_other_candidate_brands() -> None:
     assert ("must_not", "brand", "eq", "安踏") in constraints
 
 
+def test_rule_plan_routes_negated_candidate_brand_as_recommendation() -> None:
+    session = SessionState(session_id="pytest-semantic-xtep")
+    session.candidate_product_cards = [
+        {
+            "id": "p_clothes_010",
+            "name": "特步 160X 6.0 PRO 碳板竞速跑鞋",
+            "brand": "特步",
+            "category": "服饰运动",
+            "price": 919.0,
+        },
+        {
+            "id": "p_clothes_009",
+            "name": "HOKA Clifton 9 男子缓震公路跑鞋",
+            "brand": "HOKA",
+            "category": "服饰运动",
+            "price": 999.0,
+        },
+    ]
+
+    plan = build_rule_plan("我不想要特步品牌", session)
+
+    filters = {(item.kind, item.value) for item in plan.filters}
+    constraints = {(item.mode, item.field, item.operator, item.value) for item in plan.constraints}
+
+    assert plan.intent == "recommend"
+    assert plan.reference_type == "brand"
+    assert ("exclude_brand", "特步") in filters
+    assert ("brand", "特步") not in filters
+    assert ("must_not", "brand", "eq", "特步") in constraints
+
+
 def test_extract_json_object_ignores_wrapping_text() -> None:
     assert extract_json_object('```json\n{"intent":"recommend"}\n```') == {"intent": "recommend"}
 
@@ -470,6 +501,39 @@ def test_planner_policy_downgrades_invalid_bundle_plan_for_single_product_constr
     )
 
     assert plan.intent == "recommend"
+    assert plan.confidence < candidate.confidence
+
+
+def test_planner_policy_keeps_negative_brand_refinement_as_search() -> None:
+    fallback = SemanticPlan(
+        intent="recommend",
+        query="我不想要特步品牌",
+        filters=[SemanticFilter(kind="exclude_brand", value="特步")],
+        constraints=[
+            SemanticConstraint(mode="must_not", field="brand", operator="eq", value="特步", source="rule")
+        ],
+        confidence=0.74,
+    )
+    candidate = SemanticPlan(
+        intent="ask_product_detail",
+        reference_type="brand",
+        reference_text="特步",
+        query="我不想要特步品牌",
+        filters=[SemanticFilter(kind="exclude_brand", value="特步")],
+        needs_search=False,
+        confidence=0.9,
+    )
+
+    plan = validate_semantic_plan(
+        message="我不想要特步品牌",
+        session=make_session(),
+        fallback=fallback,
+        candidate=candidate,
+    )
+
+    assert plan.intent == "recommend"
+    assert plan.needs_search is True
+    assert plan.cart_action == "none"
     assert plan.confidence < candidate.confidence
 
 

@@ -107,6 +107,20 @@ class RecommendationHandler:
             cards=cards,
             policy=discovery_policy,
         )
+        if should_fallback_for_card_alignment(
+            answer_source=str(context.metadata.get("answer_source", "")),
+            card_resolution_metadata=card_resolution.metadata,
+            fallback_answer=fallback_answer,
+            cards=cards,
+            presentation_mode=discovery_policy.presentation_mode,
+        ):
+            answer = fallback_answer
+            context.metadata["answer_source"] = "grounded_fallback_card_alignment"
+            card_resolution = resolve_product_cards_for_answer(
+                answer=answer,
+                cards=cards,
+                policy=discovery_policy,
+            )
         cards = card_resolution.cards
         context.metadata["card_binding"] = card_resolution.metadata
         context.session.candidate_products = [card["id"] for card in cards]
@@ -213,3 +227,20 @@ def should_suppress_unscoped_product_cards(context: AgentTurnContext) -> bool:
             filters.facets,
         ]
     )
+
+
+def should_fallback_for_card_alignment(
+    *,
+    answer_source: str,
+    card_resolution_metadata: dict[str, object],
+    fallback_answer: str,
+    cards: list[dict],
+    presentation_mode: str,
+) -> bool:
+    if answer_source != "llm":
+        return False
+    if presentation_mode != "single":
+        return False
+    if not cards or not fallback_answer.strip():
+        return False
+    return card_resolution_metadata.get("reason") == "no_specific_answer_mentions"

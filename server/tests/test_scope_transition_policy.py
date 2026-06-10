@@ -248,6 +248,69 @@ def test_cart_action_preserves_candidates_and_filters() -> None:
     assert session.candidate_products == ["p_clothes_001"]
 
 
+def test_explicit_brand_compare_clears_uncovered_previous_product_scope() -> None:
+    policy = ScopeTransitionPolicy()
+    session = SessionState(session_id="scope-compare-reset")
+    session.merge_filters(
+        [
+            fc("product_type", "clothes.sports_shoes"),
+            fc("min_price", "1000"),
+        ]
+    )
+    session.candidate_products = ["p_clothes_013"]
+    session.candidate_product_cards = [{"id": "p_clothes_013", "brand": "\u674e\u5b81"}]
+
+    transition = apply_turn(
+        policy,
+        session,
+        "\u79d1\u989c\u6c0f\u548cAHC\u54ea\u4e2a\u66f4\u9002\u5408\u5e72\u76ae",
+        SemanticPlan(intent="compare"),
+        [
+            fc("brand", "\u79d1\u989c\u6c0f"),
+            fc("brand", "AHC"),
+            fc("keyword", "\u4fdd\u6e7f"),
+        ],
+    )
+
+    assert transition.transition_type == "compare_scope"
+    assert "filters" in transition.reset_fields
+    assert filter_pairs(session) == {
+        ("brand", "\u79d1\u989c\u6c0f"),
+        ("brand", "AHC"),
+        ("keyword", "\u4fdd\u6e7f"),
+    }
+    assert session.candidate_products == []
+    assert session.candidate_product_cards == []
+
+
+def test_explicit_brand_compare_preserves_context_when_candidates_cover_brands() -> None:
+    policy = ScopeTransitionPolicy()
+    session = SessionState(session_id="scope-compare-preserve")
+    session.merge_filters([fc("product_type", "beauty.eye_cream")])
+    session.candidate_products = ["p_beauty_021", "p_beauty_016"]
+    session.candidate_product_cards = [
+        {"id": "p_beauty_021", "brand": "\u79d1\u989c\u6c0f"},
+        {"id": "p_beauty_016", "brand": "AHC"},
+    ]
+
+    transition = apply_turn(
+        policy,
+        session,
+        "\u79d1\u989c\u6c0f\u548cAHC\u54ea\u4e2a\u66f4\u9002\u5408\u5e72\u76ae",
+        SemanticPlan(intent="compare"),
+        [
+            fc("brand", "\u79d1\u989c\u6c0f"),
+            fc("brand", "AHC"),
+            fc("keyword", "\u4fdd\u6e7f"),
+        ],
+    )
+
+    assert transition.transition_type == "compare_scope"
+    assert transition.reset_fields == ()
+    assert ("product_type", "beauty.eye_cream") in filter_pairs(session)
+    assert session.candidate_products == ["p_beauty_021", "p_beauty_016"]
+
+
 def test_scope_transition_metadata_is_state_machine_shaped() -> None:
     policy = ScopeTransitionPolicy()
     session = SessionState(session_id="scope-metadata")

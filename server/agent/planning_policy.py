@@ -5,6 +5,12 @@ from server.session.state import SessionState
 
 
 MUTATING_CART_ACTIONS = {"add", "remove", "update_quantity", "checkout"}
+NEGATIVE_REFINEMENT_FILTER_KINDS = {
+    "exclude",
+    "exclude_brand",
+    "exclude_category",
+    "exclude_product_type",
+}
 
 
 def should_try_llm_planning(*, message: str, fallback: SemanticPlan, session: SessionState) -> bool:
@@ -43,6 +49,19 @@ def validate_semantic_plan(
         plan = plan.model_copy(
             update={
                 "intent": "recommend",
+                "cart_action": "none",
+                "needs_search": True,
+                "query": plan.query or fallback.query or message,
+                "filters": merge_plan_filters(fallback, plan),
+                "constraints": merge_plan_constraints(fallback, plan),
+                "confidence": min(plan.confidence, 0.79),
+            }
+        )
+
+    if should_force_negative_refinement_search(fallback=fallback, candidate=plan):
+        plan = plan.model_copy(
+            update={
+                "intent": fallback.intent if fallback.intent in {"recommend", "browse"} else "recommend",
                 "cart_action": "none",
                 "needs_search": True,
                 "query": plan.query or fallback.query or message,
@@ -94,6 +113,16 @@ def should_block_unsafe_mutating_cart_action(
         if cart_confidence < 0.75 or reference_confidence < 0.65:
             return True
     return fallback.intent != "cart" and fallback.cart_action == "none"
+
+
+def should_force_negative_refinement_search(*, fallback: SemanticPlan, candidate: SemanticPlan) -> bool:
+    if candidate.intent != "ask_product_detail":
+        return False
+    if fallback.intent not in {"recommend", "browse"}:
+        return False
+    if any(item.kind in NEGATIVE_REFINEMENT_FILTER_KINDS for item in fallback.filters):
+        return True
+    return any(item.mode == "must_not" for item in fallback.constraints)
 
 
 def should_force_single_product_recommendation(

@@ -145,7 +145,7 @@ def test_orchestrator_suppresses_cards_when_llm_declines_recommendation() -> Non
     assert events[-1]["event"] == "done"
 
 
-def test_orchestrator_keeps_filtered_cards_when_answer_has_no_specific_product_mention() -> None:
+def test_orchestrator_keeps_aligned_single_product_candidates_when_answer_has_no_specific_product_mention() -> None:
     first = {**PRODUCT_CARD, "id": "alpha", "name": "Alpha Running Shoe", "brand": "Alpha"}
     second = {**PRODUCT_CARD, "id": "beta", "name": "Beta Running Shoe", "brand": "Beta"}
     orchestrator = make_orchestrator(cards=[first, second], llm_client=None)
@@ -154,6 +154,22 @@ def test_orchestrator_keeps_filtered_cards_when_answer_has_no_specific_product_m
     product_ids = [item["data"]["id"] for item in events if item["event"] == "product_card"]
 
     assert product_ids == ["alpha", "beta"]
+
+
+def test_orchestrator_falls_back_when_llm_answer_does_not_mention_products() -> None:
+    first = {**PRODUCT_CARD, "id": "alpha", "name": "Alpha Running Shoe", "brand": "Alpha"}
+    second = {**PRODUCT_CARD, "id": "beta", "name": "Beta Running Shoe", "brand": "Beta"}
+    llm = FakeLLMClient(tokens=["这几款都比较适合你的运动需求，可以优先看缓震和支撑。"])
+    orchestrator = make_orchestrator(cards=[first, second], llm_client=llm)
+
+    events = collect_events(orchestrator, "推荐一款运动鞋")
+    text = token_text(events)
+    product_ids = [item["data"]["id"] for item in events if item["event"] == "product_card"]
+
+    assert product_ids == ["alpha", "beta"]
+    assert "Alpha Running Shoe" in text
+    assert "Beta Running Shoe" in text
+    assert "这几款都比较适合" not in text
 
 
 def test_orchestrator_catalog_listing_keeps_all_filtered_cards_and_requests_larger_pool() -> None:

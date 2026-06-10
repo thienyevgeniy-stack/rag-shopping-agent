@@ -28,6 +28,17 @@ SERVICE_PATTERNS: dict[str, tuple[str, ...]] = {
     "coupon_policy": ("优惠券", "有券", "领券", "优惠", "折扣", "促销"),
 }
 
+NEGATIVE_REFINEMENT_TERMS = (
+    "不要",
+    "不想要",
+    "不推荐",
+    "排除",
+    "除了",
+    "先不要",
+    "别",
+    "不看",
+)
+
 FACET_PATTERNS: tuple[tuple[str, str, re.Pattern], ...] = (
     ("memory", "内存", re.compile(r"(?P<value>\d{1,3})\s*(?:g|gb|GB|G)\s*内存")),
     ("storage", "硬盘", re.compile(r"(?P<value>\d+(?:\.\d+)?)\s*(?:t|tb|TB|T)\s*(?:硬盘|存储|固态)")),
@@ -613,7 +624,13 @@ def asks_for_bundle(message: str) -> bool:
 def asks_for_new_search(message: str) -> bool:
     if looks_like_contextual_fact_question(message):
         return False
-    return any(word in message for word in ["有没有", "换个", "换一款", "再推荐", "更适合", "再看看", "还有"])
+    return has_negative_refinement_marker(message) or any(
+        word in message for word in ["有没有", "换个", "换一款", "再推荐", "更适合", "再看看", "还有"]
+    )
+
+
+def has_negative_refinement_marker(message: str) -> bool:
+    return any(word in message for word in NEGATIVE_REFINEMENT_TERMS)
 
 
 def looks_like_contextual_fact_question(message: str) -> bool:

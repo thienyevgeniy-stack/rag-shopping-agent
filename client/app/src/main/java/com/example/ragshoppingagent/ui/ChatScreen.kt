@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -21,26 +22,31 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +67,7 @@ import com.example.ragshoppingagent.model.ComparisonRecommendation
 import com.example.ragshoppingagent.model.ProductCard
 import com.example.ragshoppingagent.model.Role
 import com.example.ragshoppingagent.viewmodel.ChatViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun ChatRoute(viewModel: ChatViewModel = viewModel()) {
@@ -118,7 +125,8 @@ fun ChatScreen(
 ) {
     var selectedProduct by remember { mutableStateOf<ProductCard?>(null) }
     var showCart by remember { mutableStateOf(false) }
-    var showHistory by remember { mutableStateOf(false) }
+    val historyDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
     val currentCart = cart ?: CartState.empty()
     val context = LocalContext.current
     val imagePicker = rememberLauncherForActivityResult(
@@ -133,71 +141,104 @@ fun ChatScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            ShoppingAssistantTopBar(
-                cart = currentCart,
-                onOpenCart = {
-                    onRefreshCart()
-                    showCart = true
-                },
-                onNewSession = onNewSession,
-                onOpenHistory = {
-                    onRefreshSessions()
-                    showHistory = true
-                },
-            )
-        },
-        bottomBar = {
-            MessageComposer(
-                value = input,
-                enabled = !isStreaming,
-                selectedImageUri = selectedImageUri,
-                onValueChange = onInputChange,
-                onPickImage = {
-                    imagePicker.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                    )
-                },
-                onClearImage = onClearImage,
-                onSend = onSend,
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(padding),
-        ) {
-            LazyColumn(
+    ModalNavigationDrawer(
+        drawerState = historyDrawerState,
+        drawerContent = {
+            ModalDrawerSheet(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .fillMaxHeight()
+                    .width(320.dp),
             ) {
-                items(messages, key = { it.id }) { message ->
-                    MessageBubble(message)
-                }
-            }
-
-            comparison?.let {
-                ComparisonPanel(
-                    comparison = it,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                HistoryDrawerContent(
+                    sessions = sessions,
+                    activeSessionId = activeSessionId,
+                    isLoading = isLoadingSessions,
+                    onDismiss = {
+                        coroutineScope.launch { historyDrawerState.close() }
+                    },
+                    onOpenSession = { session ->
+                        onOpenSession(session.sessionId)
+                        coroutineScope.launch { historyDrawerState.close() }
+                    },
+                    onNewSession = {
+                        onNewSession()
+                        coroutineScope.launch { historyDrawerState.close() }
+                    },
+                    onRefreshSessions = onRefreshSessions,
+                    onResetSession = {
+                        onResetSession()
+                        coroutineScope.launch { historyDrawerState.close() }
+                    },
                 )
             }
-
-            if (products.isNotEmpty()) {
-                ProductCarousel(
-                    products = products,
+        },
+    ) {
+        Scaffold(
+            topBar = {
+                ShoppingAssistantTopBar(
                     cart = currentCart,
-                    onOpen = { selectedProduct = it },
-                    onAddToCart = onAddToCart,
-                    onIncrementCart = onIncrementCart,
-                    onDecrementCart = onDecrementCart,
+                    onOpenCart = {
+                        onRefreshCart()
+                        showCart = true
+                    },
+                    onNewSession = onNewSession,
+                    onOpenHistory = {
+                        onRefreshSessions()
+                        coroutineScope.launch { historyDrawerState.open() }
+                    },
                 )
+            },
+            bottomBar = {
+                MessageComposer(
+                    value = input,
+                    enabled = !isStreaming,
+                    selectedImageUri = selectedImageUri,
+                    onValueChange = onInputChange,
+                    onPickImage = {
+                        imagePicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
+                    onClearImage = onClearImage,
+                    onSend = onSend,
+                )
+            },
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(padding),
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(messages, key = { it.id }) { message ->
+                        MessageBubble(message)
+                    }
+                }
+
+                comparison?.let {
+                    ComparisonPanel(
+                        comparison = it,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+
+                if (products.isNotEmpty()) {
+                    ProductCarousel(
+                        products = products,
+                        cart = currentCart,
+                        onOpen = { selectedProduct = it },
+                        onAddToCart = onAddToCart,
+                        onIncrementCart = onIncrementCart,
+                        onDecrementCart = onDecrementCart,
+                    )
+                }
             }
         }
     }
@@ -224,27 +265,6 @@ fun ChatScreen(
         )
     }
 
-    if (showHistory) {
-        HistoryDialog(
-            sessions = sessions,
-            activeSessionId = activeSessionId,
-            isLoading = isLoadingSessions,
-            onDismiss = { showHistory = false },
-            onOpenSession = { session ->
-                onOpenSession(session.sessionId)
-                showHistory = false
-            },
-            onNewSession = {
-                onNewSession()
-                showHistory = false
-            },
-            onRefreshSessions = onRefreshSessions,
-            onResetSession = {
-                onResetSession()
-                showHistory = false
-            },
-        )
-    }
 }
 
 @Composable
@@ -368,7 +388,7 @@ private fun ShoppingAssistantTopBar(
 }
 
 @Composable
-private fun HistoryDialog(
+private fun HistoryDrawerContent(
     sessions: List<ChatSessionSummary>,
     activeSessionId: String,
     isLoading: Boolean,
@@ -378,71 +398,135 @@ private fun HistoryDialog(
     onRefreshSessions: () -> Unit,
     onResetSession: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .padding(vertical = 12.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "历史对话",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                    }
-                    IconButton(onClick = onRefreshSessions) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "刷新历史对话",
-                        )
-                    }
+                Text(
+                    text = "最近会话和购物车状态",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                IconButton(onClick = onRefreshSessions) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "刷新历史对话",
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "关闭历史侧栏",
+                    )
                 }
             }
-        },
-        text = {
-            if (sessions.isEmpty() && !isLoading) {
+        }
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp)
+                .clickable(onClick = onNewSession),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = null,
+                )
+                Text(
+                    text = "新建对话",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+
+        HorizontalDivider()
+
+        if (sessions.isEmpty() && !isLoading) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(
                     text = "还没有历史对话。发送一次问题后，这里会显示最近的会话。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
                 )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 420.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(sessions, key = { it.sessionId }) { session ->
-                        HistorySessionRow(
-                            session = session,
-                            isActive = session.sessionId == activeSessionId,
-                            onClick = { onOpenSession(session) },
-                        )
-                    }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(sessions, key = { it.sessionId }) { session ->
+                    HistorySessionRow(
+                        session = session,
+                        isActive = session.sessionId == activeSessionId,
+                        onClick = { onOpenSession(session) },
+                    )
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onNewSession) {
-                Text("新建对话")
+        }
+
+        HorizontalDivider()
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "当前会话可重置",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = onResetSession) {
+                Text("重置当前")
             }
-        },
-        dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onResetSession) {
-                    Text("重置当前")
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("关闭")
-                }
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable

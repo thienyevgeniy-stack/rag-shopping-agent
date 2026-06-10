@@ -79,7 +79,7 @@ def build_grounded_answer(
         pieces.append("另外可以顺手对比这两款：")
         for card in alternatives:
             pieces.append(f"{format_product_reference(card)}，{build_card_reason(card)}")
-    pieces.append("如果你有肤质、预算、通勤/户外等偏好，我可以继续把候选缩到一两款。")
+    pieces.append("如果你有品牌、预算、尺码或使用场景偏好，我可以继续把候选缩到一两款。")
     return "\n".join(piece for piece in pieces if piece.strip())
 
 
