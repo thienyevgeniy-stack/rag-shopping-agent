@@ -8,14 +8,19 @@
       "owner": "product",
       "reviewed_at": "2026-06-08",
       "priority": 100,
-      "trigger_terms": ["三亚", "海边", "度假", "旅游", "旅行"],
+      "trigger_terms": ["三亚", "马尔代夫", "巴厘岛", "普吉", "海边", "海岛", "度假", "旅游", "旅行"],
       "semantic_terms": ["海岛", "沙滩", "热带", "防晒", "泳池", "酒店", "旅行穿搭", "出游"],
-      "title": "三亚度假组合方案",
-      "summary": "我把需求拆成防晒保护、轻便穿搭、舒适出行和拍照记录四个槽位。",
+      "context_terms": {
+        "destination": ["马尔代夫", "巴厘岛", "普吉", "三亚", "海岛", "海边", "沙滩"]
+      },
+      "title": "海岛度假组合方案",
+      "summary": "我把海岛度假需求拆成防晒保护、轻便穿搭、舒适出行和拍照记录四个槽位。",
+      "title_template": "{destination}度假组合方案",
+      "summary_template": "我把{destination}度假需求拆成防晒保护、轻便穿搭、舒适出行和拍照记录四个槽位。",
       "slots": [
         {
           "label": "防晒保护",
-          "query_template": "三亚海边度假 高倍防晒 清爽 防水",
+          "query_template": "{destination}海边度假 高倍防晒 清爽 防水",
           "filters": {
             "keywords": ["防晒"],
             "product_types": ["beauty.sunscreen"]
@@ -27,7 +32,7 @@
         },
         {
           "label": "轻便上衣",
-          "query_template": "三亚度假 速干 轻薄 透气 上衣",
+          "query_template": "{destination}度假 速干 轻薄 透气 上衣",
           "filters": {
             "keywords": ["速干"]
           },
@@ -38,7 +43,7 @@
         },
         {
           "label": "舒适出行",
-          "query_template": "三亚旅行 轻量 舒适 运动鞋",
+          "query_template": "{destination}旅行 轻量 舒适 运动鞋",
           "filters": {
             "product_types": ["clothes.sports_shoes"]
           },

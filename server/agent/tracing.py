@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from server.agent.semantic import SemanticPlan
+from server.agent.semantic_schema import SemanticPlan
 from server.rag.post_process import SearchFilters
 
 
@@ -54,6 +54,7 @@ class InMemoryTraceStore:
 
 def build_trace(
     *,
+    trace_id: str | None = None,
     session_id: str,
     message: str,
     handler: str,
@@ -80,7 +81,7 @@ def build_trace(
     )
 
     return AgentTrace(
-        trace_id=uuid4().hex,
+        trace_id=trace_id or uuid4().hex,
         session_id=session_id,
         message=message,
         handler=handler,
@@ -88,9 +89,20 @@ def build_trace(
         query=query,
         filters={
             "max_price": filters.max_price,
+            "min_price": filters.min_price,
             "keywords": filters.keywords,
+            "should_keywords": filters.should_keywords,
+            "categories": filters.categories,
+            "excluded_categories": filters.excluded_categories,
             "product_types": filters.product_types,
+            "excluded_product_types": filters.excluded_product_types,
+            "brands": filters.brands,
+            "preferred_brands": filters.preferred_brands,
+            "excluded_brands": filters.excluded_brands,
             "exclusions": filters.exclusions,
+            "in_stock_only": filters.in_stock_only,
+            "facets": filters.facets,
+            "unsupported_constraints": filters.unsupported_constraints,
         },
         event_counts=dict(event_counts),
         product_ids=product_ids,

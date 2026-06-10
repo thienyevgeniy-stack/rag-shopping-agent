@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import AsyncIterator
 
 from server.agent.orchestrator import Orchestrator
+from server.agent.semantic_llm import SemanticPlanner
 from server.session.state import SQLiteSessionStore, SessionStore
 from server.tools.cart import CartTool
 from server.tools.product_compare import ProductCompareTool
@@ -34,9 +35,15 @@ class FixedSearchTool:
 
 
 class FakeLLMClient:
-    def __init__(self, tokens: list[str] | None = None, should_fail: bool = False) -> None:
+    def __init__(
+        self,
+        tokens: list[str] | None = None,
+        should_fail: bool = False,
+        delay_seconds: float = 0.0,
+    ) -> None:
         self.tokens = tokens or []
         self.should_fail = should_fail
+        self.delay_seconds = delay_seconds
         self.calls: list[dict] = []
 
     async def stream_answer(
@@ -46,23 +53,40 @@ class FakeLLMClient:
         intent: str,
     ) -> AsyncIterator[str]:
         self.calls.append({"user_message": user_message, "cards": cards, "intent": intent})
+        if self.delay_seconds:
+            await asyncio.sleep(self.delay_seconds)
         if self.should_fail:
             raise RuntimeError("LLM failed")
         for token in self.tokens:
             yield token
 
 
+class FakeUnsafeCartPlanningLLM:
+    async def stream_messages(self, messages: list[dict]) -> AsyncIterator[str]:
+        yield '{"intent":"cart","cart_action":"add","reference_type":"none",'
+        yield '"reference_text":"","quantity":1,"query":"帮我买一个好用的","filters":[],'
+        yield '"needs_search":false,"confidence":0.96}'
+
+
 def make_orchestrator(
     cards: list[dict],
     llm_client: FakeLLMClient | None,
     sessions: SessionStore | SQLiteSessionStore | None = None,
+    recommendation_llm_budget_seconds: float = 0.6,
+    semantic_planner: SemanticPlanner | None = None,
 ) -> Orchestrator:
     registry = ToolRegistry()
     search_tool = FixedSearchTool(cards)
     registry.register(search_tool)
     registry.register(ProductCompareTool(search_tool))
     registry.register(CartTool())
-    return Orchestrator(registry=registry, sessions=sessions or SessionStore(), llm_client=llm_client)
+    return Orchestrator(
+        registry=registry,
+        sessions=sessions or SessionStore(),
+        llm_client=llm_client,
+        recommendation_llm_budget_seconds=recommendation_llm_budget_seconds,
+        semantic_planner=semantic_planner,
+    )
 
 
 def collect_events(orchestrator: Orchestrator, message: str) -> list[dict]:
@@ -89,7 +113,7 @@ def test_orchestrator_streams_llm_answer_when_configured() -> None:
     assert llm.calls[0]["cards"][0]["id"] == "p_beauty_021"
 
 
-def test_orchestrator_orders_product_cards_by_answer_mentions() -> None:
+def test_orchestrator_binds_product_cards_to_answer_mentions() -> None:
     first = {**PRODUCT_CARD, "id": "alpha", "name": "Alpha Running Shoe", "brand": "Alpha"}
     second = {**PRODUCT_CARD, "id": "beta", "name": "Beta Running Shoe", "brand": "Beta"}
     llm = FakeLLMClient(tokens=["Beta Running Shoe更适合你的日常训练需求。"])
@@ -98,7 +122,58 @@ def test_orchestrator_orders_product_cards_by_answer_mentions() -> None:
     events = collect_events(orchestrator, "推荐一款运动鞋")
     product_ids = [item["data"]["id"] for item in events if item["event"] == "product_card"]
 
-    assert product_ids[:2] == ["beta", "alpha"]
+    assert product_ids == ["beta"]
+
+
+def test_orchestrator_suppresses_cards_when_llm_declines_recommendation() -> None:
+    cards = [
+        {**PRODUCT_CARD, "id": "ahc", "name": "AHC Eye Cream", "brand": "AHC"},
+        {**PRODUCT_CARD, "id": "lancome", "name": "Lancome Toner", "brand": "Lancome"},
+    ]
+    llm = FakeLLMClient(
+        tokens=[
+            "\u5f53\u524d\u5019\u9009\u5546\u54c1\u4e2d\u6ca1\u6709\u6d17\u53d1\u6db2\u7c7b\u5546\u54c1\uff0c",
+            "\u65e0\u6cd5\u4e3a\u4f60\u63a8\u8350\u7b26\u5408\u9700\u6c42\u7684\u5546\u54c1\u3002",
+        ]
+    )
+    orchestrator = make_orchestrator(cards=cards, llm_client=llm)
+
+    events = collect_events(orchestrator, "\u63a8\u8350\u4e00\u6b3e\u6d17\u53d1\u6db2")
+
+    assert "\u6ca1\u6709\u627e\u5230\u8db3\u591f\u5339\u914d\u7684\u5546\u54c1" in token_text(events)
+    assert not any(item["event"] == "product_card" for item in events)
+    assert events[-1]["event"] == "done"
+
+
+def test_orchestrator_keeps_filtered_cards_when_answer_has_no_specific_product_mention() -> None:
+    first = {**PRODUCT_CARD, "id": "alpha", "name": "Alpha Running Shoe", "brand": "Alpha"}
+    second = {**PRODUCT_CARD, "id": "beta", "name": "Beta Running Shoe", "brand": "Beta"}
+    orchestrator = make_orchestrator(cards=[first, second], llm_client=None)
+
+    events = collect_events(orchestrator, "推荐一款运动鞋")
+    product_ids = [item["data"]["id"] for item in events if item["event"] == "product_card"]
+
+    assert product_ids == ["alpha", "beta"]
+
+
+def test_orchestrator_catalog_listing_keeps_all_filtered_cards_and_requests_larger_pool() -> None:
+    cards = [
+        {**PRODUCT_CARD, "id": f"cleanser-{index}", "name": f"Foam Cleanser {index}", "brand": "Demo"}
+        for index in range(3)
+    ]
+    registry = ToolRegistry()
+    search_tool = FixedSearchTool(cards)
+    registry.register(search_tool)
+    registry.register(ProductCompareTool(search_tool))
+    registry.register(CartTool())
+    orchestrator = Orchestrator(registry=registry, sessions=SessionStore(), llm_client=None)
+
+    events = collect_events(orchestrator, "我想看所有洁面泡沫")
+    product_ids = [item["data"]["id"] for item in events if item["event"] == "product_card"]
+
+    assert "当前商品库里按你的条件找到 3 款" in token_text(events)
+    assert product_ids == ["cleanser-0", "cleanser-1", "cleanser-2"]
+    assert search_tool.calls[-1]["top_k"] == 20
 
 
 def test_orchestrator_strips_markdown_from_llm_answer() -> None:
@@ -121,6 +196,23 @@ def test_orchestrator_falls_back_to_template_when_llm_fails() -> None:
     assert "我会优先推荐这款" in token_text(events)
     assert "首选是" in token_text(events)
     assert any(item["event"] == "product_card" for item in events)
+
+
+def test_orchestrator_does_not_block_first_screen_when_llm_is_slow() -> None:
+    llm = FakeLLMClient(tokens=["这段慢回答不应该进入首屏。"], delay_seconds=0.05)
+    orchestrator = make_orchestrator(
+        cards=[PRODUCT_CARD],
+        llm_client=llm,
+        recommendation_llm_budget_seconds=0.001,
+    )
+
+    events = collect_events(orchestrator, "推荐一款眼霜")
+    answer = token_text(events)
+
+    assert "这段慢回答" not in answer
+    assert "我会优先推荐这款" in answer
+    assert any(item["event"] == "product_card" for item in events)
+    assert llm.calls
 
 
 def test_orchestrator_guards_unsafe_llm_answer_before_streaming() -> None:
@@ -158,6 +250,23 @@ def test_orchestrator_asks_clarification_for_vague_phone_request() -> None:
     done = [item for item in events if item["event"] == "done"][-1]
     assert done["data"]["needs_clarification"] is True
     assert done["data"]["pending_subject"] == "手机"
+
+
+def test_orchestrator_does_not_apply_unsafe_llm_cart_plan() -> None:
+    orchestrator = make_orchestrator(
+        cards=[PRODUCT_CARD],
+        llm_client=None,
+        semantic_planner=SemanticPlanner(FakeUnsafeCartPlanningLLM()),
+    )
+
+    collect_events(orchestrator, "推荐一款眼霜")
+    events = collect_events(orchestrator, "帮我买一个好用的")
+
+    answer = token_text(events)
+    assert "我需要先确认你指的是哪一款" in answer
+    assert not any(item["event"] == "cart_update" for item in events)
+    done = [item for item in events if item["event"] == "done"][-1]
+    assert done["data"]["needs_clarification"] is True
 
 
 def test_orchestrator_resets_filters_when_user_switches_product_scope() -> None:

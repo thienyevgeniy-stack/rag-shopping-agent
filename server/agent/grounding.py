@@ -39,6 +39,25 @@ ABSOLUTE_OR_MEDICAL_CLAIMS = (
     "行业第一",
 )
 
+DECLINE_RECOMMENDATION_TERMS = (
+    "没有",
+    "未找到",
+    "暂未",
+    "无法",
+    "不能",
+    "不支持",
+    "无可用",
+)
+
+PRODUCT_NEED_TERMS = (
+    "商品",
+    "产品",
+    "候选",
+    "推荐",
+    "匹配",
+    "类",
+)
+
 PRICE_PATTERN = re.compile(r"(?:[¥￥]\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*元)")
 
 
@@ -100,10 +119,23 @@ def detect_grounding_violations(
     if unsupported_prices:
         violations.append(f"unsupported_prices:{','.join(unsupported_prices)}")
 
-    if cards and not references_any_candidate(answer, cards):
+    if cards and not references_any_candidate(answer, cards) and not answer_declines_product_recommendation(answer):
         violations.append("missing_candidate_reference")
 
     return violations
+
+
+def answer_declines_product_recommendation(answer: str) -> bool:
+    normalized = normalize_guard_text(answer)
+    if not normalized:
+        return False
+    has_decline = any(normalize_guard_text(term) in normalized for term in DECLINE_RECOMMENDATION_TERMS)
+    has_product_need = any(normalize_guard_text(term) in normalized for term in PRODUCT_NEED_TERMS)
+    return has_decline and has_product_need
+
+
+def normalize_guard_text(value) -> str:
+    return re.sub(r"\s+", "", str(value)).lower()
 
 
 def terms_in_text(text: str, terms: tuple[str, ...]) -> list[str]:

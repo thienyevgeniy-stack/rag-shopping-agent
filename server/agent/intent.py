@@ -19,6 +19,8 @@ def detect_intent(message: str) -> UserIntent:
             "加购",
             "加到",
             "加入",
+            "添加",
+            "添加到",
             "放到",
             "放进",
             "下单",
@@ -27,9 +29,15 @@ def detect_intent(message: str) -> UserIntent:
             "删除",
             "删掉",
             "移除",
+            "去掉",
+            "拿掉",
+            "清空",
             "数量",
             "改成",
             "改为",
+            "设为",
+            "加一件",
+            "减一件",
         ]
     ):
         return UserIntent.CART

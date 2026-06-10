@@ -1,6 +1,8 @@
 package com.example.ragshoppingagent.network
 
 import com.example.ragshoppingagent.model.CartState
+import com.example.ragshoppingagent.model.ChatSessionSnapshot
+import com.example.ragshoppingagent.model.ChatSessionSummary
 import com.example.ragshoppingagent.model.ComparisonCard
 import com.example.ragshoppingagent.model.ProductCard
 import kotlinx.coroutines.Dispatchers
@@ -15,10 +17,11 @@ import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import org.json.JSONObject
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class ChatSseClient(
-    private val baseUrl: String = "http://127.0.0.1:8000",
+    private val baseUrl: String = BackendConfig.LOCAL_REVERSE_PROXY_BASE_URL,
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -26,6 +29,7 @@ class ChatSseClient(
         .build()
 
     suspend fun uploadImage(
+        sessionId: String,
         imageBytes: ByteArray,
         mimeType: String,
         filename: String,
@@ -34,6 +38,7 @@ class ChatSseClient(
         val safeFilename = filename.ifBlank { "picked_image.jpg" }
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
+            .addFormDataPart("session_id", sessionId)
             .addFormDataPart(
                 "file",
                 safeFilename,
@@ -52,6 +57,97 @@ class ChatSseClient(
                 throw IllegalStateException("Upload failed: HTTP ${response.code} $bodyText")
             }
             JSONObject(bodyText).getString("image_id")
+        }
+    }
+
+    suspend fun mutateCartItem(
+        sessionId: String,
+        productId: String,
+        quantityDelta: Int,
+    ): CartState = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("session_id", sessionId)
+            .put("product_id", productId)
+            .put("quantity_delta", quantityDelta)
+            .toString()
+            .toRequestBody("application/json; charset=utf-8".toMediaType())
+
+        val request = Request.Builder()
+            .url("$baseUrl/cart/items")
+            .post(body)
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val bodyText = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Cart update failed: HTTP ${response.code} $bodyText")
+            }
+            CartState.fromJson(JSONObject(bodyText))
+        }
+    }
+
+    suspend fun getCart(sessionId: String): CartState = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$baseUrl/cart?session_id=${encodePath(sessionId)}")
+            .get()
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val bodyText = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Cart fetch failed: HTTP ${response.code} $bodyText")
+            }
+            CartState.fromJson(JSONObject(bodyText))
+        }
+    }
+
+    suspend fun resetSession(sessionId: String) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$baseUrl/sessions/${encodePath(sessionId)}")
+            .delete()
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val bodyText = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Session reset failed: HTTP ${response.code} $bodyText")
+            }
+        }
+    }
+
+    suspend fun listSessions(limit: Int = 30): List<ChatSessionSummary> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$baseUrl/sessions?limit=$limit")
+            .get()
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val bodyText = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Session list failed: HTTP ${response.code} $bodyText")
+            }
+            val array = JSONObject(bodyText).optJSONArray("sessions") ?: return@withContext emptyList()
+            val sessions = mutableListOf<ChatSessionSummary>()
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                sessions += ChatSessionSummary.fromJson(item)
+            }
+            sessions
+        }
+    }
+
+    suspend fun getSessionSnapshot(sessionId: String): ChatSessionSnapshot = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$baseUrl/sessions/${encodePath(sessionId)}")
+            .get()
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val bodyText = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Session snapshot failed: HTTP ${response.code} $bodyText")
+            }
+            ChatSessionSnapshot.fromJson(JSONObject(bodyText))
         }
     }
 
@@ -118,5 +214,9 @@ class ChatSseClient(
                 }
             },
         )
+    }
+
+    private fun encodePath(value: String): String {
+        return URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
 }

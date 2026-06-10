@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "description": "Brand alias groups used by the shopping retrieval pipeline. Keep this file data-driven; do not add brand-specific branches in Python code.",
+  "brands": [
+    {
+      "canonical": "耐克",
+      "aliases": ["Nike"]
+    },
+    {
+      "canonical": "阿迪达斯",
+      "aliases": ["adidas", "阿迪"]
+    },
+    {
+      "canonical": "李宁",
+      "aliases": ["LI-NING", "Li Ning", "Lining"]
+    },
+    {
+      "canonical": "安踏",
+      "aliases": ["ANTA"]
+    },
+    {
+      "canonical": "特步",
+      "aliases": ["XTEP"]
+    },
+    {
+      "canonical": "HOKA",
+      "aliases": ["霍卡"]
+    },
+    {
+      "canonical": "Apple 苹果",
+      "aliases": ["Apple", "苹果"]
+    },
+    {
+      "canonical": "华为",
+      "aliases": ["Huawei"]
+    },
+    {
+      "canonical": "小米",
+      "aliases": ["Xiaomi", "Mi"]
+    },
+    {
+      "canonical": "联想",
+      "aliases": ["Lenovo"]
+    },
+    {
+      "canonical": "优衣库",
+      "aliases": ["Uniqlo"]
+    },
+    {
+      "canonical": "The North Face",
+      "aliases": ["北面", "TNF"]
+    },
+    {
+      "canonical": "迪卡侬",
+      "aliases": ["Decathlon"]
+    },
+    {
+      "canonical": "Osprey",
+      "aliases": ["小鹰"]
+    },
+    {
+      "canonical": "始祖鸟",
+      "aliases": ["Arc'teryx", "Arcteryx", "Arc Teryx"]
+    },
+    {
+      "canonical": "萨洛蒙",
+      "aliases": ["Salomon"]
+    },
+    {
+      "canonical": "露露乐蒙",
+      "aliases": ["Lululemon"]
+    },
+    {
+      "canonical": "迈乐",
+      "aliases": ["Merrell"]
+    },
+    {
+      "canonical": "SK-II",
+      "aliases": ["SKII", "SK II"]
+    },
+    {
+      "canonical": "巴黎欧莱雅",
+      "aliases": ["欧莱雅", "L'Oreal", "Loreal"]
+    },
+    {
+      "canonical": "科颜氏",
+      "aliases": ["Kiehl's", "Kiehls"]
+    },
+    {
+      "canonical": "理肤泉",
+      "aliases": ["La Roche-Posay", "La Roche Posay"]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from dataclasses import dataclass
 from io import BytesIO
@@ -14,11 +15,13 @@ IMAGE_EXTENSIONS = {
     "image/png": ".png",
     "image/webp": ".webp",
 }
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class StoredImage:
     image_id: str
+    session_id: str
     filename: str
     mime_type: str
     size_bytes: int
@@ -33,12 +36,13 @@ class ImageUploadStore:
         self.ttl_seconds = max(ttl_seconds, 1)
         self.root_dir.mkdir(parents=True, exist_ok=True)
 
-    def save(self, *, filename: str, mime_type: str, content: bytes) -> StoredImage:
+    def save(self, *, filename: str, mime_type: str, content: bytes, session_id: str = "default") -> StoredImage:
         self.cleanup_expired()
         normalized_mime = normalize_mime_type(mime_type)
         validate_image_upload(content, normalized_mime, self.max_bytes)
 
         image_id = uuid4().hex
+        owner_session_id = normalize_session_id(session_id)
         safe_filename = sanitize_filename(filename) or f"upload{IMAGE_EXTENSIONS[normalized_mime]}"
         image_path = self.root_dir / f"{image_id}{IMAGE_EXTENSIONS[normalized_mime]}"
         meta_path = self.metadata_path(image_id)
@@ -47,6 +51,7 @@ class ImageUploadStore:
         image_path.write_bytes(content)
         metadata = {
             "image_id": image_id,
+            "session_id": owner_session_id,
             "filename": safe_filename,
             "mime_type": normalized_mime,
             "size_bytes": len(content),
@@ -56,6 +61,7 @@ class ImageUploadStore:
         meta_path.write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
         return StoredImage(
             image_id=image_id,
+            session_id=owner_session_id,
             filename=safe_filename,
             mime_type=normalized_mime,
             size_bytes=len(content),
@@ -63,13 +69,16 @@ class ImageUploadStore:
             created_at=created_at,
         )
 
-    def get(self, image_id: str) -> StoredImage | None:
+    def get(self, image_id: str, *, session_id: str | None = None) -> StoredImage | None:
         if not is_safe_image_id(image_id):
             return None
         meta_path = self.metadata_path(image_id)
         if not meta_path.exists():
             return None
         metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+        owner_session_id = normalize_session_id(str(metadata.get("session_id", "default")))
+        if session_id is not None and owner_session_id != normalize_session_id(session_id):
+            return None
         created_at = float(metadata.get("created_at", 0))
         if is_expired(created_at, self.ttl_seconds):
             self.delete(image_id)
@@ -80,6 +89,7 @@ class ImageUploadStore:
             return None
         return StoredImage(
             image_id=image_id,
+            session_id=owner_session_id,
             filename=str(metadata.get("filename", "")),
             mime_type=normalize_mime_type(str(metadata.get("mime_type", ""))),
             size_bytes=int(metadata.get("size_bytes", image_path.stat().st_size)),
@@ -87,8 +97,8 @@ class ImageUploadStore:
             created_at=created_at,
         )
 
-    def read_bytes(self, image_id: str) -> tuple[bytes, StoredImage] | None:
-        stored = self.get(image_id)
+    def read_bytes(self, image_id: str, *, session_id: str | None = None) -> tuple[bytes, StoredImage] | None:
+        stored = self.get(image_id, session_id=session_id)
         if stored is None:
             return None
         return stored.path.read_bytes(), stored
@@ -104,8 +114,8 @@ class ImageUploadStore:
                 image_path = self.root_dir / image_name
                 if image_path.exists():
                     image_path.unlink()
-            except (OSError, json.JSONDecodeError):
-                pass
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Failed to delete uploaded image bytes for %s: %s", image_id, exc)
             meta_path.unlink(missing_ok=True)
 
     def cleanup_expired(self) -> int:
@@ -150,6 +160,17 @@ def normalize_mime_type(mime_type: str) -> str:
 def sanitize_filename(filename: str) -> str:
     path_name = Path(filename or "").name
     return "".join(char for char in path_name if char.isalnum() or char in {".", "_", "-"}).strip(".")
+
+
+def normalize_session_id(session_id: str) -> str:
+    value = (session_id or "default").strip()
+    if not value:
+        return "default"
+    safe_chars = []
+    for char in value[:128]:
+        if char.isalnum() or char in {"-", "_", ".", ":"}:
+            safe_chars.append(char)
+    return "".join(safe_chars) or "default"
 
 
 def is_safe_image_id(image_id: str) -> bool:

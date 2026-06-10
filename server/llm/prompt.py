@@ -11,22 +11,20 @@ def build_product_context(cards: list[dict]) -> str:
         return "当前没有可用商品。"
 
     lines: list[str] = []
-    for index, card in enumerate(cards, 1):
+    for index, card in enumerate(cards[:3], 1):
         evidence = card.get("evidence") if isinstance(card.get("evidence"), dict) else {}
         highlights = evidence.get("highlights") if isinstance(evidence.get("highlights"), list) else []
-        lines.append(
-            "\n".join(
-                [
-                    f"{index}. 商品ID: {card.get('id', '')}",
-                    f"   名称: {card.get('name', '')}",
-                    f"   类目: {card.get('category', '')}",
-                    f"   品牌: {card.get('brand', '')}",
-                    f"   价格: {card.get('price', '')} 元",
-                    f"   推荐依据: {card.get('reason', '')}",
-                    f"   商品证据要点: {' '.join(str(item) for item in highlights[:2])}",
-                ]
-            )
-        )
+        facts = [
+            f"id={card.get('id', '')}",
+            f"name={card.get('name', '')}",
+            f"category={card.get('category', '')}",
+            f"brand={card.get('brand', '')}",
+            f"price={card.get('price', '')} 元",
+            f"reason={card.get('reason', '')}",
+        ]
+        if highlights:
+            facts.append(f"evidence={' '.join(str(item) for item in highlights[:2])}")
+        lines.append(f"{index}. " + "; ".join(facts))
     return "\n".join(lines)
 
 

@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
+from server.agent.scenario_matching import has_explicit_bundle_request
 from server.agent.scenarios import ScenarioCatalog, detect_scenario_bundle, render_query_template
+from server.agent.semantic_schema import SemanticPlan
 from server.rag.post_process import SearchFilters
 
 
@@ -10,9 +12,11 @@ def test_default_scenario_catalog_loads_from_data_file() -> None:
 
     assert bundle is not None
     assert bundle.id == "sanya_trip"
+    assert bundle.title == "三亚度假组合方案"
     assert bundle.source_version == "2026-06-08"
     assert bundle.matched_terms
     assert [slot.label for slot in bundle.slots][:2] == ["防晒保护", "轻便上衣"]
+    assert "三亚" in bundle.slots[0].query
 
 
 def test_scenario_catalog_can_be_extended_without_python_branching(tmp_path: Path) -> None:
@@ -59,7 +63,39 @@ def test_scenario_catalog_routes_by_semantic_terms_not_only_triggers() -> None:
 
     assert bundle is not None
     assert bundle.id == "sanya_trip"
+    assert bundle.title == "海岛度假组合方案"
     assert "semantic" in ",".join(bundle.match_signals)
+
+
+def test_scenario_catalog_generalizes_island_destination_context() -> None:
+    bundle = detect_scenario_bundle("马尔代夫度假，帮我配一套")
+
+    assert bundle is not None
+    assert bundle.id == "sanya_trip"
+    assert bundle.title == "马尔代夫度假组合方案"
+    assert "马尔代夫" in bundle.slots[0].query
+    assert "context:destination=马尔代夫" in bundle.match_signals
+
+
+def test_scenario_catalog_does_not_route_single_product_sunscreen_request() -> None:
+    assert detect_scenario_bundle("推荐一款防晒霜") is None
+    assert detect_scenario_bundle("推荐防晒霜") is None
+
+
+def test_scenario_catalog_routes_generic_checklist_to_cross_category_bundle() -> None:
+    bundle = detect_scenario_bundle(
+        "帮我做一个夏天出行清单",
+        plan=SemanticPlan(intent="bundle", query="夏天出行清单"),
+    )
+
+    assert bundle is not None
+    assert bundle.id == "cross_category_bundle"
+
+
+def test_scenario_catalog_does_not_route_product_noun_combo_to_cross_category_bundle() -> None:
+    assert detect_scenario_bundle("推荐一款文具组合") is None
+    assert detect_scenario_bundle("文具组合推荐") is None
+    assert not has_explicit_bundle_request("推荐一款文具组合")
 
 
 def test_scenario_catalog_drops_optional_slot_when_budget_is_too_low() -> None:

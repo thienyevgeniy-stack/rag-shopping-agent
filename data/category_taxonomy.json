@@ -1,0 +1,49 @@
+{
+  "version": "2026-06-10",
+  "categories": [
+    {
+      "id": "beauty.skincare",
+      "display_name": "美妆护肤",
+      "catalog_categories": ["美妆护肤"],
+      "aliases": ["护肤品", "护肤", "美妆护肤", "美妆", "护肤类", "护肤产品"],
+      "query_aliases": ["面部护理", "皮肤护理", "基础护肤", "skincare", "skincare products"],
+      "typo_tolerant_aliases": ["护肤品", "护肤产品"],
+      "normalization_replacements": [],
+      "typo_tolerance": 1,
+      "match_fields": ["category"]
+    },
+    {
+      "id": "clothes.sports",
+      "display_name": "服饰运动",
+      "catalog_categories": ["服饰运动"],
+      "aliases": ["服饰运动", "运动服饰", "运动装备", "鞋服", "运动穿搭"],
+      "query_aliases": ["衣服鞋帽", "运动衣物"],
+      "typo_tolerant_aliases": [],
+      "normalization_replacements": [],
+      "typo_tolerance": 0,
+      "match_fields": ["category"]
+    },
+    {
+      "id": "electronics.digital",
+      "display_name": "数码电子",
+      "catalog_categories": ["数码电子", "数码家电"],
+      "aliases": ["数码电子", "数码家电", "数码产品", "电子产品", "手机数码"],
+      "query_aliases": ["3C", "3c数码"],
+      "typo_tolerant_aliases": [],
+      "normalization_replacements": [],
+      "typo_tolerance": 0,
+      "match_fields": ["category"]
+    },
+    {
+      "id": "food.beverage",
+      "display_name": "食品饮料",
+      "catalog_categories": ["食品饮料"],
+      "aliases": ["食品饮料", "食品", "饮料", "吃喝"],
+      "query_aliases": ["零食饮品"],
+      "typo_tolerant_aliases": [],
+      "normalization_replacements": [],
+      "typo_tolerance": 0,
+      "match_fields": ["category"]
+    }
+  ]
+}

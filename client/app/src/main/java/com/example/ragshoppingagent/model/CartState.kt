@@ -9,7 +9,20 @@ data class CartState(
     val totalPrice: Double,
     val isEmpty: Boolean,
 ) {
+    fun quantityFor(productId: String): Int {
+        return items.firstOrNull { it.productId == productId }?.quantity ?: 0
+    }
+
     companion object {
+        fun empty(): CartState {
+            return CartState(
+                items = emptyList(),
+                totalQuantity = 0,
+                totalPrice = 0.0,
+                isEmpty = true,
+            )
+        }
+
         fun fromJson(json: JSONObject): CartState {
             return CartState(
                 items = parseItems(json.optJSONArray("items")),

@@ -30,14 +30,14 @@ Android Compose
 
 - `VectorStore`：当前支持 `LocalJsonVectorStore` 和 `ChromaStore`。未安装 Chroma 或未启用时使用 JSON fallback；设置 `USE_CHROMA=true` 后走 Chroma。检索接口支持 `VectorSearchFilters`，可把 `product_type` 和价格过滤下推到 store。
 - `SemanticPlanner`：先把用户自然语言解析为结构化 `SemanticPlan`。LLM 可用时尝试 JSON plan，失败或不可用时走规则 fallback；后端再用 Pydantic 校验和工具执行，避免模型直接改状态。
-- 语义规划模块边界：`semantic_schema.py` 定义 plan schema，`semantic_rules.py` 保存规则 fallback，`semantic_llm.py` 负责 LLM prompt、JSON 抽取和 plan 合并。`semantic.py` 只保留兼容导出。
+- 语义规划模块边界：`semantic_schema.py` 定义 plan schema，`semantic_rules.py` 保存规则 fallback，`planning_context.py` 负责把会话历史、候选商品、购物车和 profile 压成固定大小上下文，`semantic_llm.py` 负责 LLM prompt、JSON 抽取和 plan 合并。
 - `AgentWorkflow`：当前是轻量内部工作流，按澄清、购物车、对比、上下文追问、普通推荐的优先级分派；后续可替换为 LangChain/LangGraph 类 planner，而不影响 API 和 Android 端协议。
-- Handler 模块边界：`workflow.py` 保存上下文和调度协议，`conversation_handlers.py` 处理澄清和上下文追问，`commerce_handlers.py` 处理购物车、对比和组合推荐，`recommendation_handler.py` 处理普通推荐与 GroundingGuard。`handlers.py` 只保留兼容导出。
+- Handler 模块边界：`workflow.py` 保存上下文和调度协议，`default_handlers.py` 装配默认工作流，`conversation_handlers.py` 处理澄清和上下文追问，`commerce_handlers.py` 处理购物车、对比和组合推荐，`recommendation_handler.py` 处理普通推荐与 GroundingGuard。
 - `ToolRegistry`：当前注册 `search_products`、`compare_products` 和 `manage_cart`
 - `SessionStore`：当前支持 `memory`、`sqlite` 和 `redis` 三种后端。`memory` 适合本地临时调试；`sqlite` 会把完整 `SessionState` 持久化到 DB，覆盖会话历史、候选商品、pending subject 和购物车；`redis` 适合多进程/多实例共享会话与购物车状态。
 - `InputProcessor`：当前支持 `TextProcessor` 和 `MultimodalInputProcessor`；后续可增加 `ASRProcessor` 和真实 `VLMProcessor`。
 - `MultimodalInputProcessor`：当前支持图片 base64 输入，通过商品主图视觉签名做相似匹配，把图片转成可检索的文字线索；后续可替换为真实 VLM。
-- 输入模块边界：`inputs/base.py` 定义输入协议和文本处理，`inputs/image_similarity.py` 负责本地图片签名索引，`inputs/multimodal.py` 负责把图片线索并入文本查询，`inputs/processors.py` 只保留兼容导出。
+- 输入模块边界：`inputs/base.py` 定义输入协议和文本处理，`inputs/image_similarity.py` 负责本地图片签名索引，`inputs/multimodal.py` 负责把图片线索并入文本查询。
 - `ProductRetrievalPipeline`：把商品检索拆成 store 预过滤召回、后处理过滤、去重、轻量 rerank 和 diagnostics。`ProductSearchTool` 只负责把命中转换成商品卡，后续接 BM25/向量混合召回、外部 reranker 或 AB 实验时不需要改 handler。
 - `PostProcessor`：当前有 `RangeFilter`、`ProductTypeFilter`、`KeywordFilter`、`ExclusionFilter`。即使 store 已经做 metadata 预过滤，后处理仍作为安全兜底，保证旧索引或 fallback 场景下结果正确。
 - `LLMClient`：当前支持 Ark OpenAI-compatible `/chat/completions` 流式接口；`USE_LLM=true` 且 `ARK_API_KEY` 存在时启用。
@@ -104,7 +104,7 @@ python -m server.rag.ingest
 
 ## 语义规划层
 
-`server.agent.semantic.SemanticPlanner` 是当前从 Demo 走向成熟 Agent 的关键层。默认使用快速规则 fallback；当 `.env` 或环境变量设置 `USE_SEMANTIC_LLM=true` 且 `USE_LLM=true` 时，会先尝试 LLM JSON plan，失败后仍回退规则解析。它输出的 `SemanticPlan` 包括：
+`server.agent.semantic_llm.SemanticPlanner` 是当前从 Demo 走向成熟 Agent 的关键层。默认使用快速规则 fallback；当 `.env` 或环境变量设置 `USE_SEMANTIC_LLM=true` 且 `USE_LLM=true` 时，会在 `SEMANTIC_LLM_BUDGET_SECONDS` 的短预算内尝试 LLM JSON plan，超时、解析失败或校验失败都会回退规则解析。它输出的 `SemanticPlan` 包括：
 
 - `intent`：recommend / compare / cart / ask_product_detail / clarify / browse
 - `cart_action`：add / remove / update_quantity / view / checkout
@@ -113,7 +113,11 @@ python -m server.rag.ingest
 - `filters`：keyword / max_price / exclude
 - `query` 和 `needs_search`
 
-LLM plan 只作为语义理解建议，所有字段都要经过 Pydantic 校验；业务动作仍由 handler 和 tool 执行。这样比单纯堆正则更有泛化能力，也比让 LLM 直接调用业务动作更安全。
+LLM plan 只作为语义理解建议，所有字段都要经过 Pydantic 校验；业务动作仍由 handler 和 tool 执行。Planner prompt 只读取 `PlanningContext` 的 compact 快照，不直接拼完整 session，避免 prompt 膨胀和敏感运行时字段泄漏。这样比单纯堆正则更有泛化能力，也比让 LLM 直接调用业务动作更安全。
+
+语义规划之后还有一层 `PlannerPolicy` 校验：LLM 可以把自然语言泛化成结构化 plan，但不能越过产品策略。`RuleSignals` 会把规则层抽到的高确定性信息统一成 route signal，例如是否有购物车动作、上下文引用、组合方案信号、复杂偏好、模糊预算、明确单品品类等。`PlannerPolicy` 不再散落地问“有没有某几个词”，而是根据这些信号决定 deterministic / planner / clarification 路径。典型规则包括：明确单品品类和硬预算可走确定性检索；上下文引用、否定偏好、模糊预算和购物车动作进入 planner；单品请求不能因为命中“防晒、通勤、训练”等场景词而升级成组合方案；LLM 不能在缺少规则层购物车证据时直接执行加购、删除、改数量或结算，这类 mutating cart action 会被降级为澄清。
+
+当前仍保留 taxonomy、品牌 alias、数量单位、场景 catalog 等可控词表，这是电商系统必要的结构化基础；长尾表达通过短预算 LLM planner 和 query-level eval 持续补齐，不再靠在 Python 分支中无限堆词。
 
 ## 商品对比
 
@@ -167,6 +171,18 @@ http://127.0.0.1:8000/products/p_beauty_021
 ```
 
 Android 详情弹窗中的“打开链接”会跳转到该页面，用于满足 Demo 中可点击商品落地页的基础要求。
+
+## NLU 输出契约
+
+`SemanticPlan` 不只输出 `intent`、`filters` 和 `constraints`，还会携带字段级 `confidence_by_field` 与 `evidence`。例如用户输入“推荐一款1000元以上的运动鞋”时，plan 会记录：
+
+- `confidence_by_field.product_type`：来自 taxonomy / profile / embedding classifier 的置信度。
+- `evidence.product_type`：标准 `product_type`、展示名、来源和命中的原始 span。
+- `confidence_by_field.price` 与 `evidence.price`：预算上下限的结构化来源。
+- `confidence_by_field.quantity` 与 `evidence.quantity`：数量、单位、span、解析来源和是否为购物车数量。
+- `confidence_by_field.reference`：第一款/第二款/品牌/商品名等上下文引用的确定性。
+
+`Orchestrator` 会把这些内容写入 trace metadata 的 `nlu` 字段。`PlannerPolicy` 对购物车写操作采用更严格策略：加购、删除、改数量、结算必须有明确动作、可解析商品引用和足够置信度；缺少证据时会降级为澄清，而不是直接修改购物车状态。
 
 ## 多模态图片找货
 

@@ -1,31 +1,22 @@
 from collections.abc import AsyncIterator
-from functools import lru_cache
 import time
+from uuid import uuid4
 
 from server.agent.context import extract_contextual_filters
 from server.agent.filters import extract_filters
-from server.agent.handlers import AgentTurnContext, AgentWorkflow, build_default_workflow
+from server.agent.default_handlers import build_default_workflow
+from server.agent.workflow import AgentTurnContext, AgentWorkflow
 from server.agent.query_rewriter import rewrite_query
-from server.agent.scenarios import load_scenario_catalog
-from server.agent.semantic import SemanticPlanner
+from server.agent.query_feedback import QueryFeedbackStore, build_query_feedback_event
+from server.agent.semantic_llm import SemanticPlanner
+from server.agent.scope_transition import ScopeTransitionPolicy
 from server.agent.tracing import InMemoryTraceStore, build_trace
-from server.config import get_settings
-from server.inputs.processors import MultimodalInputProcessor, TextProcessor
-from server.inputs.visual_embedding import ProductVisualEmbeddingIndex
-from server.llm.ark_client import ArkChatClient, LLMClient
-from server.rag.embedding_cache import EmbeddingCache
+from server.inputs.base import TextProcessor
+from server.inputs.multimodal import MultimodalInputProcessor
+from server.llm.ark_client import LLMClient
 from server.rag.post_process import SearchFilters
-from server.rag.vector_store import (
-    ArkMultimodalEmbeddingFunction,
-    ChromaStore,
-    LocalJsonVectorStore,
-    build_chroma_embedding_function,
-    load_product_documents,
-)
-from server.session.state import PersistentSessionStore, RedisSessionStore, SQLiteSessionStore, SessionStore
-from server.tools.cart import CartTool
-from server.tools.product_compare import ProductCompareTool
-from server.tools.product_search import ProductSearchTool
+from server.session.memory import refresh_session_memory
+from server.session.state import PersistentSessionStore
 from server.tools.registry import ToolRegistry
 
 
@@ -37,16 +28,24 @@ class Orchestrator:
         llm_client: LLMClient | None = None,
         workflow: AgentWorkflow | None = None,
         semantic_planner: SemanticPlanner | None = None,
+        scope_transition_policy: ScopeTransitionPolicy | None = None,
         trace_store: InMemoryTraceStore | None = None,
+        query_feedback_store: QueryFeedbackStore | None = None,
         input_processor: TextProcessor | MultimodalInputProcessor | None = None,
+        recommendation_llm_budget_seconds: float = 0.0,
+        retrieval_timeout_seconds: float = 5.0,
     ) -> None:
         self.registry = registry
         self.sessions = sessions
         self.llm_client = llm_client
         self.workflow = workflow or build_default_workflow()
         self.semantic_planner = semantic_planner or SemanticPlanner()
+        self.scope_transition_policy = scope_transition_policy or ScopeTransitionPolicy()
         self.trace_store = trace_store or InMemoryTraceStore()
+        self.query_feedback_store = query_feedback_store
         self.input_processor = input_processor or TextProcessor()
+        self.recommendation_llm_budget_seconds = recommendation_llm_budget_seconds
+        self.retrieval_timeout_seconds = max(0.0, retrieval_timeout_seconds)
 
     async def stream_chat(
         self,
@@ -58,17 +57,19 @@ class Orchestrator:
         image_filename: str = "",
     ) -> AsyncIterator[dict]:
         started_at = time.time()
+        trace_id = uuid4().hex
+        session = None
+        emitted: list[dict] = []
+        status_event = {
+            "event": "status",
+            "data": {"state": "thinking", "text": "正在思考"},
+        }
+        emitted.append(status_event)
+        yield status_event
+
         session = self.sessions.get(session_id)
         try:
             session.add_user_message(user_message)
-
-            emitted: list[dict] = []
-            status_event = {
-                "event": "status",
-                "data": {"state": "thinking", "text": "正在思考"},
-            }
-            emitted.append(status_event)
-            yield status_event
 
             processed = self.input_processor.process(
                 user_message,
@@ -90,13 +91,21 @@ class Orchestrator:
             plan = await self.semantic_planner.plan(processed.text, session)
             extracted = plan.to_filter_conditions()
             extracted.extend(extract_contextual_filters(processed.text, session, plan))
-            session.merge_filters(extracted)
+            scope_transition = self.scope_transition_policy.decide(
+                processed.text,
+                plan,
+                session,
+                extracted,
+            )
+            self.scope_transition_policy.apply(session, scope_transition)
+            session.merge_filters(extracted, auto_scope_reset=False)
 
             intent = plan.to_user_intent()
             query = plan.query or rewrite_query(processed.text, session)
             filters = SearchFilters.from_session(session)
 
             context = AgentTurnContext(
+                trace_id=trace_id,
                 session_id=session_id,
                 message=processed.text,
                 intent=intent,
@@ -106,14 +115,41 @@ class Orchestrator:
                 session=session,
                 registry=self.registry,
                 llm_client=self.llm_client,
+                recommendation_llm_budget_seconds=self.recommendation_llm_budget_seconds,
+                retrieval_timeout_seconds=self.retrieval_timeout_seconds,
             )
+            if plan.query_understanding:
+                context.metadata["query_understanding"] = plan.query_understanding
+            context.metadata["nlu"] = {
+                "confidence_by_field": dict(plan.confidence_by_field),
+                "evidence": dict(plan.evidence),
+            }
+            context.metadata["scope_transition"] = scope_transition.as_metadata()
 
             async for item in self.workflow.stream(context):
                 emitted.append(item)
                 yield item
 
+            feedback_event = build_query_feedback_event(
+                trace_id=trace_id,
+                session_id=session_id,
+                message=processed.text,
+                plan=plan,
+                filters=filters,
+                events=emitted,
+                metadata=context.metadata,
+            )
+            if feedback_event is not None:
+                context.metadata["query_feedback"] = {
+                    "recorded": self.query_feedback_store is not None,
+                    "reasons": list(feedback_event.reasons),
+                }
+                if self.query_feedback_store is not None:
+                    self.query_feedback_store.record(feedback_event)
+
             self.trace_store.add(
                 build_trace(
+                    trace_id=trace_id,
                     session_id=session_id,
                     message=processed.text,
                     handler=context.selected_handler,
@@ -126,124 +162,36 @@ class Orchestrator:
                 )
             )
         finally:
-            self.sessions.save(session)
+            if session is not None:
+                refresh_session_memory(session)
+                self.sessions.save(session)
 
 
-@lru_cache
 def get_orchestrator() -> Orchestrator:
-    settings = get_settings()
-    store = create_store(settings)
-    llm_client = create_llm_client(settings)
-    registry = ToolRegistry()
-    search_tool = ProductSearchTool(store, public_base_url=settings.public_base_url)
-    registry.register(search_tool)
-    registry.register(ProductCompareTool(search_tool))
-    registry.register(CartTool())
-    semantic_client = llm_client if settings.use_semantic_llm else None
-    scenario_catalog = load_scenario_catalog(str(settings.scenario_bundle_file))
-    return Orchestrator(
-        registry=registry,
-        sessions=create_session_store(settings),
-        llm_client=llm_client,
-        workflow=build_default_workflow(scenario_catalog),
-        semantic_planner=SemanticPlanner(semantic_client),
-        trace_store=InMemoryTraceStore(max_items=settings.trace_max_items),
-        input_processor=create_input_processor(settings),
-    )
+    from server.app_container import get_orchestrator as get_app_orchestrator
+
+    return get_app_orchestrator()
 
 
 def create_session_store(settings) -> PersistentSessionStore:
-    backend = settings.normalized_session_backend
-    if backend in {"memory", "inmemory", "in-memory"}:
-        return SessionStore(
-            max_items=settings.session_max_items,
-            ttl_seconds=settings.session_ttl_seconds,
-        )
-    if backend in {"sqlite", "sqlite3", "db"}:
-        return SQLiteSessionStore(
-            settings.session_db_file,
-            max_items=settings.session_max_items,
-            ttl_seconds=settings.session_ttl_seconds,
-        )
-    if backend == "redis":
-        return RedisSessionStore(
-            settings.session_redis_url,
-            max_items=settings.session_max_items,
-            ttl_seconds=settings.session_ttl_seconds,
-        )
-    raise ValueError(f"Unsupported SESSION_BACKEND: {settings.session_backend}")
+    from server.app_container import create_session_store as create_app_session_store
+
+    return create_app_session_store(settings)
 
 
 def create_store(settings):
-    if settings.use_chroma:
-        try:
-            embedding_function, collection_name = build_chroma_embedding_function(
-                use_ark_embedding=settings.use_ark_embedding,
-                embedding_api=settings.ark_embedding_api,
-                api_key=settings.ark_api_key,
-                base_url=settings.ark_base_url,
-                model=settings.ark_embedding_model,
-                timeout_seconds=settings.embedding_timeout_seconds,
-                batch_size=settings.embedding_batch_size,
-                collection_name=settings.chroma_collection_name,
-            )
-            if settings.use_ark_embedding and not settings.ark_api_key:
-                print("USE_ARK_EMBEDDING=true but ARK_API_KEY is empty; using local hashing embedding.")
-            store = ChromaStore(
-                settings.chroma_path,
-                collection_name=collection_name,
-                embedding_function=embedding_function,
-            )
-            if store.count() == 0:
-                store.add(load_product_documents(settings.product_data_file))
-            return store
-        except RuntimeError as exc:
-            print(f"Chroma unavailable, falling back to local JSON search: {exc}")
-    return LocalJsonVectorStore(settings.product_data_file)
+    from server.app_container import create_store as create_app_store
+
+    return create_app_store(settings)
 
 
 def create_llm_client(settings) -> LLMClient | None:
-    if not settings.use_llm:
-        return None
-    if not settings.ark_api_key:
-        print("USE_LLM=true but ARK_API_KEY is empty; falling back to template answers.")
-        return None
-    return ArkChatClient(
-        api_key=settings.ark_api_key,
-        base_url=settings.ark_base_url,
-        model=settings.ark_model,
-        timeout_seconds=settings.llm_timeout_seconds,
-    )
+    from server.app_container import create_llm_client as create_app_llm_client
+
+    return create_app_llm_client(settings)
 
 
 def create_input_processor(settings) -> MultimodalInputProcessor:
-    visual_embedding_index = None
-    if settings.use_visual_embedding:
-        if not settings.ark_api_key:
-            print("USE_VISUAL_EMBEDDING=true but ARK_API_KEY is empty; using signature image fallback.")
-        else:
-            model = settings.visual_embedding_model_name
-            embedder = ArkMultimodalEmbeddingFunction(
-                api_key=settings.ark_api_key,
-                base_url=settings.ark_base_url,
-                model=model,
-                timeout_seconds=settings.embedding_timeout_seconds,
-                batch_size=1,
-            )
-            visual_embedding_index = ProductVisualEmbeddingIndex(
-                settings.visual_embedding_index_file,
-                embedder=embedder,
-                cache=EmbeddingCache(settings.embedding_cache_file),
-                model=model,
-            )
-            if not visual_embedding_index.entries:
-                print(
-                    "Visual embedding index is empty; run scripts/build_visual_embedding_index.py "
-                    "or use signature image fallback."
-                )
+    from server.app_container import create_input_processor as create_app_input_processor
 
-    return MultimodalInputProcessor(
-        settings.product_data_file,
-        settings.product_image_path,
-        visual_embedding_index=visual_embedding_index,
-    )
+    return create_app_input_processor(settings)

@@ -35,7 +35,7 @@ class MultimodalInputProcessor:
         )
         if not matches:
             fallback = text or "find visually similar products"
-            summary = "Image received, but the current catalog did not produce a reliable visual match."
+            summary = "我看到了你上传的图片，但当前商品库里还没有足够可靠的视觉近邻。我会先结合你补充的文字需求继续找，避免硬说同款。"
             return ProcessedInput(
                 text=f"{fallback}\nImage signal: {summary}",
                 modality="image",
@@ -47,12 +47,15 @@ class MultimodalInputProcessor:
         product_types = ", ".join(best.get("product_type_names", []))
         match_source = best.get("visual_match_source", "signature")
         summary = (
-            f"Uploaded image visually matches {best['name']}, brand {best['brand']}, "
-            f"category {best['category']}"
+            f"我先按图片做了视觉匹配，当前商品库里最接近的是「{best['name']}」，"
+            f"品牌是 {best['brand']}，类目是 {best['category']}"
         )
         if product_types:
-            summary += f", product type {product_types}"
-        summary += f", visual similarity {best['similarity']:.2f}, source {match_source}."
+            summary += f"，更像是 {product_types}"
+        summary += (
+            f"。相似度约 {best['similarity']:.2f}，来源是 {format_visual_match_source(match_source)}。"
+            "我会优先按这个风格和品类给你推荐，同时不会把它说成百分百同款。"
+        )
 
         user_text = text or "find the same or visually similar product from the image"
         visual_query = (
@@ -87,3 +90,9 @@ class MultimodalInputProcessor:
         if image_bytes:
             return self.visual_index.match_image_bytes(image_bytes, top_k=3)
         return self.visual_index.match_base64_image(image_base64, top_k=3)
+
+
+def format_visual_match_source(source: str) -> str:
+    if source == "multimodal_embedding":
+        return "多模态向量"
+    return "图片视觉特征"

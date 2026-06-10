@@ -10,3 +10,4 @@ posthog<4
 Pillow==11.1.0
 pytest==8.3.4
 redis==5.2.1
+pypinyin==0.52.0

@@ -1,28 +1,14 @@
-import re
-from pathlib import PurePosixPath
-from urllib.parse import quote, urlparse
-
 from dataclasses import dataclass
 
+from server.commerce.facts import get_commerce_gateway
+from server.commerce.services import CommerceDataGateway
+from server.rag.category_taxonomy import category_display_names, infer_category_ids
 from server.rag.post_process import SearchFilters
 from server.rag.retrieval_pipeline import ProductRetrievalPipeline, RetrievalDiagnostics
 from server.rag.taxonomy import enrich_product_type_metadata, product_type_display_names
 from server.rag.vector_store import VectorStore
-
-
-DESCRIPTION_FAQ_MARKERS = (" 问：", "\n问：", " Q:", "\nQ:")
-SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[。！？!?；;])\s*")
-PRIORITY_EVIDENCE_TERMS = (
-    "核心卖点",
-    "主打",
-    "搭载",
-    "搭配",
-    "适合",
-    "适用",
-    "场景",
-    "日常",
-    "建议",
-)
+from server.tools.product_evidence import build_product_evidence, build_reason
+from server.tools.product_urls import build_product_detail_url, build_product_image_url
 
 
 @dataclass(frozen=True)
@@ -34,9 +20,15 @@ class ProductSearchResult:
 class ProductSearchTool:
     name = "search_products"
 
-    def __init__(self, store: VectorStore, public_base_url: str = "") -> None:
+    def __init__(
+        self,
+        store: VectorStore,
+        public_base_url: str = "",
+        commerce_gateway: CommerceDataGateway | None = None,
+    ) -> None:
         self.store = store
         self.public_base_url = public_base_url
+        self.commerce_gateway = commerce_gateway or get_commerce_gateway()
         self.pipeline = ProductRetrievalPipeline(store)
 
     def run(self, query: str, filters: SearchFilters, top_k: int = 5) -> list[dict]:
@@ -44,21 +36,50 @@ class ProductSearchTool:
 
     def run_with_diagnostics(self, query: str, filters: SearchFilters, top_k: int = 5) -> ProductSearchResult:
         result = self.pipeline.run(query=query, filters=filters, top_k=top_k)
-        cards = [to_product_card(hit, query, public_base_url=self.public_base_url) for hit in result.hits]
+        cards = [
+            to_product_card(
+                hit,
+                query,
+                public_base_url=self.public_base_url,
+                commerce_gateway=self.commerce_gateway,
+            )
+            for hit in result.hits
+        ]
         return ProductSearchResult(cards=cards, diagnostics=result.diagnostics)
 
 
-def to_product_card(hit: dict, query: str, public_base_url: str = "") -> dict:
+def to_product_card(
+    hit: dict,
+    query: str,
+    public_base_url: str = "",
+    commerce_gateway: CommerceDataGateway | None = None,
+) -> dict:
     metadata = enrich_product_type_metadata(hit["metadata"])
+    product_facts = (commerce_gateway or get_commerce_gateway()).enrich_product(metadata)
+    price_fact = product_facts.fact("price")
+    stock_fact = product_facts.fact("stock")
+    promotion_fact = product_facts.fact("coupon_policy")
+    invoice_fact = product_facts.fact("invoice_policy")
+    after_sales_fact = product_facts.fact("after_sales_policy")
+    logistics_fact = product_facts.fact("logistics_policy")
+    category_ids = infer_category_ids(metadata)
     reason = build_reason(metadata, query)
     return {
-        "id": metadata["id"],
+        "id": product_facts.product_id,
+        "sku_id": product_facts.sku_id,
         "name": metadata["name"],
         "category": metadata["category"],
+        "category_ids": category_ids,
+        "category_names": category_display_names(category_ids),
         "product_types": metadata.get("product_types", []),
         "product_type_names": product_type_display_names(metadata.get("product_types", [])),
         "brand": metadata["brand"],
-        "price": metadata["price"],
+        "price": price_fact.value if price_fact.available else metadata["price"],
+        "stock": stock_fact.value if stock_fact.available else metadata.get("stock"),
+        "promotion": promotion_fact.value if promotion_fact.available else None,
+        "invoice_policy": invoice_fact.value if invoice_fact.available else None,
+        "after_sales_policy": after_sales_fact.value if after_sales_fact.available else None,
+        "logistics_policy": logistics_fact.value if logistics_fact.available else None,
         "image_url": build_product_image_url(metadata.get("image_url", ""), public_base_url),
         "detail_url": build_product_detail_url(
             product_id=metadata["id"],
@@ -67,144 +88,22 @@ def to_product_card(hit: dict, query: str, public_base_url: str = "") -> dict:
         ),
         "reason": reason,
         "score": hit.get("score", 0),
-        "evidence": build_product_evidence(metadata, hit, query=query, reason=reason),
+        "evidence": build_product_evidence(
+            metadata,
+            hit,
+            query=query,
+            reason=reason,
+            product_facts=product_facts,
+        ),
     }
 
 
-def build_reason(metadata: dict, query: str) -> str:
-    tags = metadata.get("tags", [])
-    matched = matched_query_terms(tags, query)
-    evidence = build_evidence_summary(metadata, query=query, matched_terms=matched)
-    if matched and evidence:
-        return f"匹配你提到的{format_terms(matched)}；{evidence}"
-    if evidence:
-        return evidence
-    if matched:
-        return f"匹配你提到的{format_terms(matched)}，可作为当前需求的候选商品。"
-    return "与当前检索条件相近，可继续结合预算、尺码或使用场景确认。"
-
-
-def build_product_evidence(metadata: dict, hit: dict, *, query: str, reason: str) -> dict:
-    matched_terms = matched_query_terms(metadata.get("tags", []), query)
-    return {
-        "source": "product_catalog",
-        "product_id": metadata["id"],
-        "name": metadata["name"],
-        "brand": metadata["brand"],
-        "category": metadata["category"],
-        "product_types": metadata.get("product_types", []),
-        "price": float(metadata["price"]),
-        "reason": reason,
-        "highlights": build_evidence_highlights(metadata, matched_terms=matched_terms, query=query),
-        "matched_terms": matched_terms,
-        "score": float(hit.get("score", 0.0)),
-        "retrieval_rank": hit.get("retrieval_rank"),
-    }
-
-
-def matched_query_terms(tags: list, query: str) -> list[str]:
-    normalized_query = str(query).lower()
-    matched: list[str] = []
-    for tag in tags:
-        value = str(tag).strip()
-        if not value:
-            continue
-        if len(value) > 18 and ":" not in value:
-            continue
-        if value.lower() in normalized_query and value not in matched:
-            matched.append(value)
-    return matched[:4]
-
-
-def format_terms(terms: list[str]) -> str:
-    if not terms:
-        return "核心条件"
-    return "、".join(terms[:3])
-
-
-def build_evidence_summary(metadata: dict, *, query: str, matched_terms: list[str]) -> str:
-    highlights = build_evidence_highlights(metadata, matched_terms=matched_terms, query=query)
-    return join_complete_sentences(highlights, max_sentences=2)
-
-
-def build_evidence_highlights(metadata: dict, *, matched_terms: list[str], query: str = "") -> list[str]:
-    description = clean_description(str(metadata.get("description", "")))
-    if not description:
-        return []
-
-    sentences = split_sentences(description)
-    if not sentences:
-        return []
-
-    scored: list[tuple[int, int, str]] = []
-    query_terms = [term for term in matched_terms if len(term) >= 2]
-    normalized_query = query.lower()
-    for index, sentence in enumerate(sentences):
-        score = 0
-        for term in query_terms:
-            if term in sentence:
-                score += 12
-        for term in PRIORITY_EVIDENCE_TERMS:
-            if term in sentence:
-                score += 6
-        if normalized_query and any(chunk and chunk in sentence.lower() for chunk in normalized_query.split()):
-            score += 4
-        if index == 0:
-            score += 3
-        if "注意" in sentence and score < 10:
-            score -= 3
-        scored.append((score, -index, sentence))
-
-    selected = [item[2] for item in sorted(scored, reverse=True)[:2]]
-    selected.sort(key=lambda sentence: sentences.index(sentence))
-    return selected
-
-
-def clean_description(description: str) -> str:
-    text = " ".join(description.split())
-    for marker in DESCRIPTION_FAQ_MARKERS:
-        index = text.find(marker)
-        if index >= 0:
-            text = text[:index]
-    return text.strip()
-
-
-def split_sentences(text: str) -> list[str]:
-    sentences = [piece.strip() for piece in SENTENCE_SPLIT_PATTERN.split(text) if piece.strip()]
-    return [sentence for sentence in sentences if sentence]
-
-
-def join_complete_sentences(sentences: list[str], max_sentences: int = 2) -> str:
-    selected = sentences[: max(max_sentences, 1)]
-    return "".join(ensure_sentence_ending(sentence) for sentence in selected).strip()
-
-
-def ensure_sentence_ending(sentence: str) -> str:
-    stripped = sentence.strip()
-    if not stripped:
-        return ""
-    if stripped[-1] in "。！？!?；;":
-        return stripped
-    return f"{stripped}。"
-
-
-def build_product_image_url(raw_image_url: str, public_base_url: str = "") -> str:
-    filename = PurePosixPath(str(raw_image_url).replace("\\", "/")).name
-    if not filename:
-        return ""
-
-    path = f"/assets/products/{quote(filename)}"
-    if not public_base_url:
-        return path
-    return f"{public_base_url.rstrip('/')}{path}"
-
-
-def build_product_detail_url(product_id: str, raw_detail_url: str = "", public_base_url: str = "") -> str:
-    raw_detail_url = str(raw_detail_url).strip()
-    if raw_detail_url and urlparse(raw_detail_url).scheme in {"http", "https"}:
-        return raw_detail_url
-
-    path = f"/products/{quote(str(product_id))}"
-    if not public_base_url:
-        return path
-    return f"{public_base_url.rstrip('/')}{path}"
+__all__ = [
+    "ProductSearchResult",
+    "ProductSearchTool",
+    "build_product_detail_url",
+    "build_product_image_url",
+    "build_product_evidence",
+    "build_reason",
+    "to_product_card",
+]

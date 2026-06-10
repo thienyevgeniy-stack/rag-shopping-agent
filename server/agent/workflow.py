@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from server.agent.intent import UserIntent
-from server.agent.semantic import SemanticPlan
+from server.agent.semantic_schema import SemanticPlan
 from server.llm.ark_client import LLMClient
 from server.rag.post_process import SearchFilters
 from server.session.state import SessionState
@@ -12,6 +12,7 @@ from server.tools.registry import ToolRegistry
 
 @dataclass
 class AgentTurnContext:
+    trace_id: str
     session_id: str
     message: str
     intent: UserIntent
@@ -21,7 +22,10 @@ class AgentTurnContext:
     session: SessionState
     registry: ToolRegistry
     llm_client: LLMClient | None
+    recommendation_llm_budget_seconds: float = 0.0
+    retrieval_timeout_seconds: float = 5.0
     selected_handler: str = ""
+    scenario_match: object | None = None
     metadata: dict[str, object] = field(default_factory=dict)
 
 

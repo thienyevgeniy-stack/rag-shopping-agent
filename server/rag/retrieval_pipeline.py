@@ -1,7 +1,19 @@
 import time
 from dataclasses import dataclass, field
 
-from server.rag.post_process import ExclusionFilter, KeywordFilter, ProductTypeFilter, RangeFilter, SearchFilters
+from server.commerce.facts import get_fact_provider
+from server.rag.post_process import (
+    BrandFilter,
+    CategoryFilter,
+    ExclusionFilter,
+    KeywordFilter,
+    ProductTypeFilter,
+    RangeFilter,
+    SearchFilters,
+    StockFilter,
+)
+from server.rag.brand_aliases import message_mentions_brand
+from server.rag.category_taxonomy import category_matches
 from server.rag.taxonomy import product_type_matches
 from server.rag.vector_store import VectorSearchFilters, VectorStore
 
@@ -41,7 +53,15 @@ class ProductRetrievalPipeline:
         self.store = store
         self.candidate_multiplier = max(candidate_multiplier, 1)
         self.min_candidate_pool = max(min_candidate_pool, 1)
-        self.post_processors = [RangeFilter(), ProductTypeFilter(), KeywordFilter(), ExclusionFilter()]
+        self.post_processors = [
+            RangeFilter(),
+            ProductTypeFilter(),
+            CategoryFilter(),
+            BrandFilter(),
+            StockFilter(),
+            KeywordFilter(),
+            ExclusionFilter(),
+        ]
 
     def run(self, query: str, filters: SearchFilters, top_k: int = 5) -> RetrievalPipelineResult:
         top_k = max(int(top_k), 0)
@@ -64,11 +84,19 @@ class ProductRetrievalPipeline:
             query=query,
             top_k=candidate_top_k,
             filters=VectorSearchFilters(
-                max_price=filters.max_price,
+                categories=tuple(filters.categories),
                 product_types=tuple(filters.product_types),
             ),
         )
         steps.append(RetrievalStep("store_prefilter_recall", len(hits), elapsed_ms(started)))
+        if not hits and (filters.product_types or filters.categories):
+            started = time.perf_counter()
+            hits = self.store.query(
+                query=query,
+                top_k=candidate_top_k,
+                filters=VectorSearchFilters(),
+            )
+            steps.append(RetrievalStep("store_recall_without_type_prefilter", len(hits), elapsed_ms(started)))
 
         for processor in self.post_processors:
             started = time.perf_counter()
@@ -110,8 +138,10 @@ def rerank_hits(hits: list[dict], *, query: str, filters: SearchFilters) -> list
     for index, hit in enumerate(hits):
         metadata = hit.get("metadata", {})
         score = float(hit.get("score", 0.0))
+        raw_score = score
         score += relevance_bonus(metadata, query=query, filters=filters)
         enriched_hit = dict(hit)
+        enriched_hit["raw_score"] = raw_score
         enriched_hit["score"] = score
         enriched_hit["retrieval_rank"] = index + 1
         scored_hits.append((score, -index, enriched_hit))
@@ -123,21 +153,33 @@ def rerank_hits(hits: list[dict], *, query: str, filters: SearchFilters) -> list
 def relevance_bonus(metadata: dict, *, query: str, filters: SearchFilters) -> float:
     bonus = 0.0
     haystack = build_metadata_haystack(metadata)
+    price_fact = get_fact_provider().price(metadata)
+    current_price = float(price_fact.value if price_fact.available else metadata.get("price", 0) or 0)
     if filters.product_types and any(product_type_matches(item, metadata) for item in filters.product_types):
         bonus += 20.0
+    if filters.categories and any(category_matches(item, metadata) for item in filters.categories):
+        bonus += 12.0
     for keyword in filters.keywords:
         if keyword and keyword.lower() in haystack:
             bonus += 6.0
+    for keyword in filters.should_keywords:
+        if keyword and keyword.lower() in haystack:
+            bonus += 4.0
+    for brand in filters.preferred_brands:
+        if brand and brand.lower() in str(metadata.get("brand", "")).lower():
+            bonus += 5.0
     if filters.max_price is not None:
-        price = float(metadata.get("price", 0) or 0)
-        if price <= filters.max_price:
+        if current_price <= filters.max_price:
             bonus += 2.0
-            bonus += max(0.0, min(filters.max_price - price, 500.0) / 500.0)
+            bonus += max(0.0, min(filters.max_price - current_price, 500.0) / 500.0)
+    if filters.min_price is not None:
+        if current_price >= filters.min_price:
+            bonus += 1.0
     name = str(metadata.get("name", "")).lower()
     brand = str(metadata.get("brand", "")).lower()
     if name and name in query:
         bonus += 8.0
-    if brand and brand in query:
+    if brand and message_mentions_brand(query, brand):
         bonus += 4.0
     return bonus
 
@@ -156,10 +198,21 @@ def build_metadata_haystack(metadata: dict) -> str:
 
 def describe_filters(filters: SearchFilters) -> dict[str, object]:
     return {
+        "min_price": filters.min_price,
         "max_price": filters.max_price,
         "keywords": list(filters.keywords),
+        "should_keywords": list(filters.should_keywords),
+        "categories": list(filters.categories),
+        "excluded_categories": list(filters.excluded_categories),
         "product_types": list(filters.product_types),
+        "excluded_product_types": list(filters.excluded_product_types),
+        "brands": list(filters.brands),
+        "preferred_brands": list(filters.preferred_brands),
+        "excluded_brands": list(filters.excluded_brands),
         "exclusions": list(filters.exclusions),
+        "in_stock_only": filters.in_stock_only,
+        "facets": list(filters.facets),
+        "unsupported_constraints": list(filters.unsupported_constraints),
     }
 
 

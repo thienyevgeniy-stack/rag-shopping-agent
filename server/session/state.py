@@ -19,14 +19,25 @@ class ConversationTurn(BaseModel):
     content: str
 
 
+class UserPreferenceProfile(BaseModel):
+    product_types: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    preferred_brands: list[str] = Field(default_factory=list)
+    disliked_terms: list[str] = Field(default_factory=list)
+    budget_ceiling: float | None = None
+
+
 class SessionState(BaseModel):
     session_id: str
     history: list[ConversationTurn] = Field(default_factory=list)
+    history_summary: str = ""
+    user_profile: UserPreferenceProfile = Field(default_factory=UserPreferenceProfile)
     filters: list[FilterCondition] = Field(default_factory=list)
     exclusions: list[FilterCondition] = Field(default_factory=list)
     candidate_products: list[str] = Field(default_factory=list)
     candidate_product_cards: list[dict] = Field(default_factory=list)
     pending_subject: str = ""
+    pending_cart_action: dict = Field(default_factory=dict)
     cart: list[dict] = Field(default_factory=list)
 
     def add_user_message(self, content: str) -> None:
@@ -35,8 +46,8 @@ class SessionState(BaseModel):
     def add_assistant_message(self, content: str) -> None:
         self.history.append(ConversationTurn(role="assistant", content=content))
 
-    def merge_filters(self, filters: list[FilterCondition]) -> None:
-        if self.starts_new_product_scope(filters):
+    def merge_filters(self, filters: list[FilterCondition], *, auto_scope_reset: bool = True) -> None:
+        if auto_scope_reset and self.starts_new_product_scope(filters):
             self.reset_product_scope()
         for item in filters:
             target = self.exclusions if item.kind == "exclude" else self.filters
@@ -44,15 +55,20 @@ class SessionState(BaseModel):
                 target.append(item)
 
     def starts_new_product_scope(self, incoming_filters: list[FilterCondition]) -> bool:
-        incoming_types = product_type_values(incoming_filters)
-        if not incoming_types:
+        incoming_scopes = product_scope_values(incoming_filters)
+        if not incoming_scopes:
             return False
 
-        existing_types = product_type_values(self.filters)
-        if not existing_types:
-            return False
+        existing_scopes = product_scope_values(self.filters)
+        if not existing_scopes:
+            return self.has_product_scoped_state()
 
-        return set(incoming_types) != set(existing_types)
+        return True
+
+    def has_product_scoped_state(self) -> bool:
+        if self.exclusions or self.candidate_products or self.candidate_product_cards or self.pending_subject:
+            return True
+        return any(item.kind == "keyword" for item in self.filters)
 
     def reset_product_scope(self) -> None:
         self.filters = []
@@ -60,6 +76,26 @@ class SessionState(BaseModel):
         self.candidate_products = []
         self.candidate_product_cards = []
         self.pending_subject = ""
+        self.pending_cart_action = {}
+
+    def clear_product_constraints(self) -> None:
+        self.filters = []
+        self.exclusions = []
+        self.pending_subject = ""
+        self.pending_cart_action = {}
+
+    def clear_product_candidates(self) -> None:
+        self.candidate_products = []
+        self.candidate_product_cards = []
+        self.pending_subject = ""
+        self.pending_cart_action = {}
+
+
+class SessionRecord(BaseModel):
+    session_id: str
+    state: SessionState
+    last_seen: float
+    updated_at: float
 
 
 class SessionStore:
@@ -90,6 +126,22 @@ class SessionStore:
     def save(self, state: SessionState) -> None:
         self._sessions[state.session_id] = (state, self._clock())
 
+    def delete(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
+
+    def list_recent(self, limit: int = 20) -> list[SessionRecord]:
+        self.prune_expired(self._clock())
+        items = sorted(self._sessions.items(), key=lambda item: item[1][1], reverse=True)
+        return [
+            SessionRecord(
+                session_id=session_id,
+                state=entry[0],
+                last_seen=entry[1],
+                updated_at=entry[1],
+            )
+            for session_id, entry in items[: max(1, limit)]
+        ]
+
     def count(self) -> int:
         self.prune_expired(self._clock())
         return len(self._sessions)
@@ -115,6 +167,12 @@ class PersistentSessionStore(Protocol):
         ...
 
     def save(self, state: SessionState) -> None:
+        ...
+
+    def delete(self, session_id: str) -> None:
+        ...
+
+    def list_recent(self, limit: int = 20) -> list[SessionRecord]:
         ...
 
     def count(self) -> int:
@@ -170,6 +228,37 @@ class SQLiteSessionStore:
         with self._lock:
             self.prune_expired(self._clock())
             self._upsert_state(state, self._clock())
+
+    def delete(self, session_id: str) -> None:
+        with self._lock:
+            with self._connect() as connection:
+                connection.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+
+    def list_recent(self, limit: int = 20) -> list[SessionRecord]:
+        now = self._clock()
+        with self._lock:
+            self.prune_expired(now)
+            with self._connect() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT session_id, state_json, last_seen, updated_at
+                    FROM sessions
+                    ORDER BY updated_at DESC
+                    LIMIT ?
+                    """,
+                    (max(1, limit),),
+                ).fetchall()
+        records: list[SessionRecord] = []
+        for session_id, state_json, last_seen, updated_at in rows:
+            records.append(
+                SessionRecord(
+                    session_id=session_id,
+                    state=self._load_state(session_id, state_json),
+                    last_seen=float(last_seen),
+                    updated_at=float(updated_at),
+                )
+            )
+        return records
 
     def count(self) -> int:
         with self._lock:
@@ -267,6 +356,33 @@ class RedisSessionStore:
     def save(self, state: SessionState) -> None:
         self._touch(state)
 
+    def delete(self, session_id: str) -> None:
+        self.client.delete(self._key(session_id))
+        self.client.zrem(self.index_key, session_id)
+
+    def list_recent(self, limit: int = 20) -> list[SessionRecord]:
+        self._prune_stale_index_entries()
+        raw_items = self.client.zrange(self.index_key, 0, -1)
+        session_ids = [self._decode(item) for item in raw_items]
+        session_ids.reverse()
+
+        records: list[SessionRecord] = []
+        for session_id in session_ids[: max(1, limit)]:
+            raw = self.client.get(self._key(session_id))
+            if raw is None:
+                continue
+            state = self._load_state(session_id, raw)
+            updated_at = float(self.client.zscore(self.index_key, session_id) or 0)
+            records.append(
+                SessionRecord(
+                    session_id=session_id,
+                    state=state,
+                    last_seen=updated_at,
+                    updated_at=updated_at,
+                )
+            )
+        return records
+
     def count(self) -> int:
         self._prune_stale_index_entries()
         return int(self.client.zcard(self.index_key))
@@ -325,4 +441,15 @@ def product_type_values(filters: list[FilterCondition]) -> list[str]:
     for item in filters:
         if item.kind == "product_type" and item.value not in values:
             values.append(item.value)
+    return values
+
+
+def product_scope_values(filters: list[FilterCondition]) -> list[str]:
+    values: list[str] = []
+    for item in filters:
+        if item.kind not in {"product_type", "category"}:
+            continue
+        value = f"{item.kind}:{item.value}"
+        if item.value and value not in values:
+            values.append(value)
     return values

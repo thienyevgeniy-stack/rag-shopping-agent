@@ -155,8 +155,19 @@ $env:TRACE_MAX_ITEMS="200"
 
 ```powershell
 $env:USE_SEMANTIC_LLM="true"
+$env:SEMANTIC_LLM_BUDGET_SECONDS="0.25"
 .\scripts\run_server.ps1
 ```
+
+语义 LLM 只负责输出结构化 plan；超出预算会回退规则解析。Planner 只读取压缩后的会话上下文，输出还会经过 `PlannerPolicy` 校验：缺少确定性证据的加购、删除、改数量、结算等购物车写操作会被改为澄清，不会直接修改状态。推荐回答的首屏路径仍由 `RECOMMENDATION_LLM_BUDGET_SECONDS` 控制，可设为 `0` 以优先保证首屏速度。
+
+查询规划回归评测：
+
+```powershell
+python scripts\evaluate_query_plans.py
+```
+
+该脚本读取 `server/eval/query_plan_cases.json`，检查 intent、route、品类、预算、否定和引用解析。`known_gap` 用例会单独报告但不让本地回归失败。
 
 健康检查：
 

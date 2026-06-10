@@ -1,11 +1,12 @@
 import json
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from server.agent.orchestrator import Orchestrator, get_orchestrator
+from server.agent.orchestrator import Orchestrator
+from server.app_container import get_orchestrator
 from server.config import Settings, get_settings
 from server.inputs.upload_store import ImageUploadStore
 
@@ -40,20 +41,7 @@ async def chat(
     settings: Settings = Depends(get_settings),
 ) -> StreamingResponse:
     async def event_stream() -> AsyncIterator[str]:
-        image_bytes = b""
-        image_mime_type = request.image_mime_type
-        image_filename = request.image_filename
-        if request.image_id:
-            store = ImageUploadStore(
-                settings.upload_image_path,
-                max_bytes=settings.upload_image_max_bytes,
-                ttl_seconds=settings.upload_image_ttl_seconds,
-            )
-            stored = store.read_bytes(request.image_id)
-            if stored is not None:
-                image_bytes, metadata = stored
-                image_mime_type = metadata.mime_type
-                image_filename = metadata.filename
+        image_bytes, image_mime_type, image_filename = resolve_image_payload(request, settings)
 
         async for item in orchestrator.stream_chat(
             session_id=request.session_id,
@@ -66,3 +54,62 @@ async def chat(
             yield sse(item["event"], item["data"])
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.websocket("/ws/chat")
+async def chat_websocket(
+    websocket: WebSocket,
+    orchestrator: Orchestrator = Depends(get_orchestrator),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    await websocket.accept()
+    try:
+        while True:
+            payload = await websocket.receive_json()
+            try:
+                request = ChatRequest.model_validate(payload)
+            except ValidationError as exc:
+                await websocket.send_json(
+                    {
+                        "event": "error",
+                        "data": {
+                            "code": "invalid_request",
+                            "message": "请求参数不完整或格式不正确。",
+                            "details": exc.errors(),
+                        },
+                    }
+                )
+                continue
+
+            image_bytes, image_mime_type, image_filename = resolve_image_payload(request, settings)
+            async for item in orchestrator.stream_chat(
+                session_id=request.session_id,
+                user_message=request.message,
+                image_base64=request.image_base64,
+                image_bytes=image_bytes,
+                image_mime_type=image_mime_type,
+                image_filename=image_filename,
+            ):
+                await websocket.send_json(item)
+    except WebSocketDisconnect:
+        return
+
+
+def resolve_image_payload(request: ChatRequest, settings: Settings) -> tuple[bytes, str, str]:
+    image_bytes = b""
+    image_mime_type = request.image_mime_type
+    image_filename = request.image_filename
+    if not request.image_id:
+        return image_bytes, image_mime_type, image_filename
+
+    store = ImageUploadStore(
+        settings.upload_image_path,
+        max_bytes=settings.upload_image_max_bytes,
+        ttl_seconds=settings.upload_image_ttl_seconds,
+    )
+    stored = store.read_bytes(request.image_id, session_id=request.session_id)
+    if stored is None:
+        return image_bytes, image_mime_type, image_filename
+
+    image_bytes, metadata = stored
+    return image_bytes, metadata.mime_type, metadata.filename

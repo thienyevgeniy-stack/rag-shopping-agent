@@ -19,3 +19,8 @@ class ToolRegistry:
         if name not in self._tools:
             raise KeyError(f"Tool not registered: {name}")
         return self._tools[name].run(**kwargs)
+
+    def get(self, name: str) -> Tool:
+        if name not in self._tools:
+            raise KeyError(f"Tool not registered: {name}")
+        return self._tools[name]

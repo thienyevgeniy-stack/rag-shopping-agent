@@ -1,5 +1,5 @@
 {
-  "version": "2026-06-07",
+  "version": "2026-06-10",
   "product_types": [
     {
       "id": "beauty.eye_cream",
@@ -14,9 +14,33 @@
       "match_fields": ["name", "sub_category", "tags"]
     },
     {
+      "id": "beauty.cleanser",
+      "display_name": "洁面乳",
+      "aliases": ["洁面乳", "洗面奶", "洁面", "洁面膏", "泡沫洁面"],
+      "query_aliases": [
+        "洗面乳",
+        "洁面泡沫",
+        "洗面泡沫",
+        "洁面啫喱",
+        "洗面啫喱",
+        "洁面凝胶",
+        "泡沫洗面奶",
+        "氨基酸洁面",
+        "温和洁面",
+        "男士洁面",
+        "敏感肌洁面"
+      ],
+      "typo_tolerant_aliases": ["洗面泡沫", "洁面泡沫", "洗面乳"],
+      "normalization_replacements": [["西面", "洗面"]],
+      "typo_tolerance": 1,
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
       "id": "beauty.sunscreen",
       "display_name": "防晒",
       "aliases": ["防晒", "防晒霜", "防晒乳"],
+      "exclude_terms": ["防晒帽", "遮阳帽", "鸭舌帽", "防晒衣"],
+      "required_categories": ["美妆护肤"],
       "match_fields": ["name", "sub_category", "tags"]
     },
     {
@@ -26,9 +50,59 @@
       "match_fields": ["name", "sub_category", "tags"]
     },
     {
+      "id": "beauty.lipstick",
+      "display_name": "口红",
+      "aliases": ["口红", "唇膏", "唇釉", "唇彩", "唇泥"],
+      "query_aliases": ["口红", "唇部彩妆", "哑光口红", "滋润口红"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "beauty.serum",
+      "display_name": "精华",
+      "aliases": ["精华", "精华液", "精华露", "肌底液", "修护精华", "抗老精华", "红腰子", "小黑瓶"],
+      "query_aliases": ["护肤精华", "面部精华", "补水精华", "维稳精华"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "beauty.toner",
+      "display_name": "化妆水",
+      "aliases": ["化妆水", "爽肤水", "柔肤水", "精华水", "护肤水", "神仙水"],
+      "query_aliases": ["补水水", "调理水", "保湿水"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "beauty.setting_powder",
+      "display_name": "定妆粉",
+      "aliases": ["蜜粉", "散粉", "粉饼", "蜜粉饼", "定妆粉", "定妆"],
+      "query_aliases": ["控油定妆", "定妆产品", "柔焦蜜粉"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "beauty.foundation",
+      "display_name": "粉底液",
+      "aliases": ["粉底液", "底妆", "粉底", "持妆粉底"],
+      "query_aliases": ["遮瑕粉底", "控油粉底", "清透底妆"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "beauty.face_mask",
+      "display_name": "面膜",
+      "aliases": ["面膜", "保湿面膜", "涂抹式面膜", "补水面膜"],
+      "query_aliases": ["修护面膜", "舒缓面膜"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "beauty.eyebrow_pencil",
+      "display_name": "眉笔",
+      "aliases": ["眉笔", "双头眉笔", "螺黛生花眉笔"],
+      "query_aliases": ["画眉", "眉部彩妆"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
       "id": "clothes.sports_shoes",
       "display_name": "运动鞋",
       "aliases": ["运动鞋", "跑鞋", "跑步鞋", "训练鞋", "竞速跑鞋", "篮球鞋"],
+      "query_aliases": ["鞋", "鞋子", "一双鞋", "慢跑鞋", "路跑鞋", "健身鞋", "训练跑鞋", "运动鞋子", "球鞋"],
       "compound_aliases": [["跑步", "鞋"], ["训练", "鞋"], ["马拉松", "鞋"], ["篮球", "鞋"], ["缓震", "鞋"]],
       "match_fields": ["name", "sub_category", "tags"]
     },
@@ -40,9 +114,61 @@
       "match_fields": ["name", "sub_category", "tags"]
     },
     {
+      "id": "clothes.t_shirt",
+      "display_name": "T恤",
+      "aliases": ["T恤", "短袖T恤", "速干T恤", "短袖", "上衣", "训练上衣", "跑步上衣"],
+      "query_aliases": ["短袖上衣", "速干上衣", "运动短袖", "透气上衣"],
+      "compound_aliases": [["速干", "T恤"], ["跑步", "上衣"], ["训练", "上衣"], ["短袖", "上衣"]],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "clothes.hoodie",
+      "display_name": "卫衣",
+      "aliases": ["卫衣", "连帽卫衣", "套头卫衣"],
+      "query_aliases": ["运动卫衣", "休闲卫衣"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "clothes.hiking_shoes",
+      "display_name": "徒步鞋",
+      "aliases": ["徒步鞋", "登山鞋", "户外鞋", "越野鞋", "防水徒步鞋"],
+      "query_aliases": ["户外徒步鞋", "登山徒步鞋"],
+      "compound_aliases": [["徒步", "鞋"], ["登山", "鞋"], ["户外", "鞋"]],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "clothes.backpack",
+      "display_name": "背包",
+      "aliases": ["背包", "双肩背包", "双肩包", "通勤包", "户外包"],
+      "query_aliases": ["旅行背包", "户外背包", "收纳背包"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "clothes.hat",
+      "display_name": "帽子",
+      "aliases": ["帽子", "棒球帽", "鸭舌帽", "遮阳帽", "运动帽"],
+      "exclude_terms": ["防晒霜", "防晒乳", "防晒露"],
+      "query_aliases": ["防晒帽", "户外帽", "速干帽"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
       "id": "electronics.phone",
       "display_name": "手机",
       "aliases": ["手机", "智能手机"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "electronics.laptop",
+      "display_name": "笔记本电脑",
+      "aliases": ["笔记本电脑", "笔记本", "轻薄本", "游戏本", "MacBook", "MateBook"],
+      "query_aliases": ["办公笔记本", "生产力笔记本", "设计师笔记本"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "electronics.tablet",
+      "display_name": "平板电脑",
+      "aliases": ["平板电脑", "平板", "iPad", "MatePad"],
+      "query_aliases": ["学习平板", "办公平板", "影音平板"],
       "match_fields": ["name", "sub_category", "tags"]
     },
     {
@@ -55,6 +181,62 @@
       "id": "food.coffee",
       "display_name": "咖啡",
       "aliases": ["咖啡", "咖啡豆", "挂耳咖啡", "冷萃"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "food.instant_food",
+      "display_name": "方便食品",
+      "aliases": ["方便食品", "方便面", "泡面", "速食面", "杯面", "来一桶"],
+      "query_aliases": ["速食", "即食食品"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "food.soda",
+      "display_name": "碳酸饮料",
+      "aliases": ["碳酸饮料", "气泡水", "汽水", "苏打", "可口可乐"],
+      "query_aliases": ["无糖汽水", "无糖气泡水"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "food.snacks",
+      "display_name": "零食",
+      "aliases": ["零食", "坚果", "每日坚果", "肉松饼", "糕点", "干果"],
+      "query_aliases": ["休闲零食", "坚果礼盒"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "food.tea_drink",
+      "display_name": "茶饮",
+      "aliases": ["茶饮", "乌龙茶", "茉莉花茶", "东方树叶", "无糖茶"],
+      "query_aliases": ["瓶装茶", "无糖茶饮"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "food.milk",
+      "display_name": "牛奶",
+      "aliases": ["牛奶", "纯牛奶", "有机纯牛奶", "特仑苏", "金典"],
+      "query_aliases": ["盒装牛奶", "常温牛奶"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "food.yogurt",
+      "display_name": "酸奶",
+      "aliases": ["酸奶", "酸牛奶", "安慕希", "纯甄", "风味酸奶"],
+      "query_aliases": ["常温酸奶", "希腊酸奶"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "food.condiment",
+      "display_name": "调味品",
+      "aliases": ["调味品", "调味料", "酱油", "生抽", "老抽"],
+      "query_aliases": ["厨房调味", "佐餐调料"],
+      "match_fields": ["name", "sub_category", "tags"]
+    },
+    {
+      "id": "food.functional_drink",
+      "display_name": "功能饮料",
+      "aliases": ["功能饮料", "维生素饮料", "水溶C100", "维生素C饮品"],
+      "query_aliases": ["补充维C饮料", "运动饮料"],
       "match_fields": ["name", "sub_category", "tags"]
     }
   ]

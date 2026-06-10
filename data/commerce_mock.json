@@ -1,0 +1,73 @@
+{
+  "version": "2026-06-10-local-mock",
+  "products": [
+    {
+      "product_id": "p_clothes_009",
+      "pricing": {
+        "current_price": 999,
+        "updated_at": 1781100000
+      },
+      "inventory": {
+        "available_qty": 18,
+        "updated_at": 1781100000
+      },
+      "promotion": {
+        "has_coupon": true,
+        "description": "满900减80",
+        "updated_at": 1781100000
+      },
+      "invoice": {
+        "supports_invoice": true,
+        "supports_enterprise_invoice": true,
+        "types": ["普通发票", "增值税专用发票"],
+        "updated_at": 1781100000
+      },
+      "logistics": {
+        "ships_today": true,
+        "promise": "今日18:00前下单预计今日发货",
+        "warehouse": "mock-wh-shanghai",
+        "updated_at": 1781100000
+      },
+      "after_sales": {
+        "warranty": "以品牌官方质保政策为准",
+        "seven_day_return": true,
+        "opened_return_policy": "不影响二次销售时支持7天无理由",
+        "updated_at": 1781100000
+      }
+    },
+    {
+      "product_id": "p_beauty_021",
+      "pricing": {
+        "current_price": 199,
+        "updated_at": 1781100000
+      },
+      "inventory": {
+        "available_qty": 32,
+        "updated_at": 1781100000
+      },
+      "promotion": {
+        "has_coupon": false,
+        "description": "当前无可用优惠券",
+        "updated_at": 1781100000
+      },
+      "invoice": {
+        "supports_invoice": true,
+        "supports_enterprise_invoice": false,
+        "types": ["普通发票"],
+        "updated_at": 1781100000
+      },
+      "logistics": {
+        "ships_today": true,
+        "promise": "预计今日可发",
+        "warehouse": "mock-wh-guangzhou",
+        "updated_at": 1781100000
+      },
+      "after_sales": {
+        "warranty": "以品牌官方政策为准",
+        "seven_day_return": true,
+        "opened_return_policy": "未开封支持退换，拆封后通常不支持无理由退换",
+        "updated_at": 1781100000
+      }
+    }
+  ]
+}

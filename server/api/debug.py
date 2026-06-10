@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from server.agent.orchestrator import Orchestrator, get_orchestrator
+from server.agent.orchestrator import Orchestrator
+from server.app_container import get_orchestrator
 
 
 router = APIRouter(prefix="/debug", tags=["debug"])

@@ -1,4 +1,8 @@
-from server.llm.ark_client import parse_openai_sse_line
+import asyncio
+
+import httpx
+
+from server.llm.ark_client import ArkChatClient, parse_openai_sse_line
 from server.llm.prompt import build_grounded_messages
 
 
@@ -34,3 +38,32 @@ def test_build_grounded_messages_include_guardrails_and_products() -> None:
     assert "不得编造" in prompt
     assert "科颜氏牛油果保湿眼霜" in prompt
     assert "210.0 元" in prompt
+
+
+def test_ark_chat_client_retries_retryable_errors_before_streaming_tokens() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(500, json={"error": "temporary"})
+        return httpx.Response(
+            200,
+            text='data: {"choices":[{"delta":{"content":"你好"}}]}\n\ndata: [DONE]\n\n',
+            headers={"content-type": "text/event-stream"},
+        )
+
+    async def collect() -> list[str]:
+        client = ArkChatClient(
+            api_key="test-key",
+            base_url="https://ark.example.test/api/v3",
+            model="doubao",
+            timeout_seconds=1,
+            retry_attempts=2,
+            transport=httpx.MockTransport(handler),
+        )
+        return [token async for token in client.stream_messages([{"role": "user", "content": "hi"}])]
+
+    assert asyncio.run(collect()) == ["你好"]
+    assert calls == 2

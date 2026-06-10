@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +26,7 @@ import com.example.ragshoppingagent.model.ProductCard
 fun CartPanel(
     cart: CartState,
     modifier: Modifier = Modifier,
+    maxVisibleItems: Int? = 3,
     onOpenItem: (CartItem) -> Unit,
 ) {
     Surface(
@@ -62,7 +65,8 @@ fun CartPanel(
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
             } else {
-                cart.items.takeLast(3).forEach { item ->
+                val visibleItems = if (maxVisibleItems == null) cart.items else cart.items.takeLast(maxVisibleItems)
+                visibleItems.forEach { item ->
                     CartItemRow(item = item, onOpen = { onOpenItem(item) })
                 }
             }
@@ -125,5 +129,35 @@ fun CartItem.toProductCard(): ProductCard {
         imageUrl = imageUrl,
         detailUrl = detailUrl,
         reason = "购物车商品",
+    )
+}
+
+@Composable
+fun CartDialog(
+    cart: CartState,
+    onDismiss: () -> Unit,
+    onOpenItem: (CartItem) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "购物车",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            CartPanel(
+                cart = cart,
+                maxVisibleItems = null,
+                onOpenItem = onOpenItem,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        },
     )
 }
