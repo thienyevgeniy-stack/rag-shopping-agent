@@ -13,6 +13,7 @@ from server.config import Settings, get_settings
 from server.inputs.multimodal import MultimodalInputProcessor
 from server.inputs.visual_embedding import ProductVisualEmbeddingIndex
 from server.llm.ark_client import ArkChatClient, LLMClient
+from server.nlu.clarification_policy import CategoryClarificationPolicy
 from server.rag.embedding_cache import EmbeddingCache
 from server.rag.embeddings import ArkEmbeddingFunction
 from server.rag.vector_store import (
@@ -51,11 +52,12 @@ def get_orchestrator() -> Orchestrator:
     registry.register(CartTool())
     semantic_client = llm_client if settings.use_semantic_llm else None
     scenario_catalog = create_scenario_catalog(settings)
+    clarification_policy = create_clarification_policy(settings)
     return Orchestrator(
         registry=registry,
         sessions=create_session_store(settings),
         llm_client=llm_client,
-        workflow=build_default_workflow(scenario_catalog),
+        workflow=build_default_workflow(scenario_catalog, clarification_policy),
         semantic_planner=SemanticPlanner(
             semantic_client,
             timeout_seconds=settings.semantic_llm_budget_seconds,
@@ -77,6 +79,10 @@ def create_query_feedback_store(settings: Settings) -> QueryFeedbackStore | None
 def create_scenario_catalog(settings: Settings):
     classifier = create_scenario_classifier(settings)
     return load_scenario_catalog(str(settings.scenario_bundle_file), classifier=classifier)
+
+
+def create_clarification_policy(settings: Settings) -> CategoryClarificationPolicy:
+    return CategoryClarificationPolicy.from_file(settings.clarification_policy_file)
 
 
 def create_scenario_classifier(settings: Settings) -> HybridScenarioClassifier:

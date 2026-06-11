@@ -70,6 +70,12 @@ def build_semantic_plan_messages(message: str, session: SessionState) -> list[di
         "quantity": "integer or null",
         "query": "search query in Chinese, include category and preferences",
         "presentation_mode": "auto|single|listing",
+        "filled_slots": {
+            "product_type": "canonical product type object or null",
+            "budget": "price range object or null",
+            "brand": "brand object or null",
+            "use_case": "usage preference object or null",
+        },
         "filters": [
             {
                 "kind": (
@@ -170,6 +176,7 @@ def merge_semantic_plans(fallback: SemanticPlan, llm_plan: SemanticPlan) -> Sema
             "query": llm_plan.query or fallback.query,
             "presentation_mode": presentation_mode,
             "query_understanding": fallback.query_understanding or llm_plan.query_understanding,
+            "filled_slots": merge_filled_slots(fallback, llm_plan),
             "filters": merged_filters,
             "constraints": merged_constraints,
             "confidence_by_field": merge_confidence_by_field(fallback, llm_plan),
@@ -185,6 +192,14 @@ def merge_confidence_by_field(fallback: SemanticPlan, llm_plan: SemanticPlan) ->
         merged[field] = max(float(current), float(value))
     if llm_plan.confidence:
         merged["llm_plan"] = round(float(llm_plan.confidence), 4)
+    return merged
+
+
+def merge_filled_slots(fallback: SemanticPlan, llm_plan: SemanticPlan) -> dict:
+    merged = dict(fallback.filled_slots)
+    for field, value in llm_plan.filled_slots.items():
+        if value not in (None, "", [], {}, ()):
+            merged[field] = value
     return merged
 
 

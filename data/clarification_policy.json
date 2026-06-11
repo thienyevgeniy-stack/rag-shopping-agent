@@ -1,0 +1,33 @@
+{
+  "version": "2026-06-11",
+  "rules": [
+    {
+      "id": "phone_preference_probe",
+      "product_type": "electronics.phone",
+      "subject": "手机",
+      "trigger_terms": ["推荐", "买", "想要", "需要"],
+      "required_slots": ["budget", "use_case"],
+      "optional_slots": ["brand", "camera", "battery", "performance"],
+      "ask_order": ["budget", "use_case"],
+      "max_clarifications": 1,
+      "allow_default_recommendation": false,
+      "slot_terms": {
+        "use_case": ["拍照", "续航", "性能", "性价比", "轻薄", "游戏", "老人", "学生"],
+        "camera": ["拍照", "摄影", "影像", "像素"],
+        "battery": ["续航", "电池", "充电"],
+        "performance": ["性能", "游戏", "处理器", "流畅"]
+      },
+      "slot_validators": {
+        "budget": {"type": "price", "min_value": 1, "max_value": 50000},
+        "use_case": {"type": "non_empty"}
+      },
+      "budget_regex": "\\d+\\s*(?:元|块)?\\s*(?:以内|以下|左右|预算)|预算\\s*(?:是|为|大概|约|在)?\\s*\\d+",
+      "question_templates": {
+        "budget,use_case": "可以。我先确认一下：预算大概是多少？你更看重拍照、续航、性能还是性价比？",
+        "budget": "可以。我先确认一下：预算大概是多少？",
+        "use_case": "可以。我先确认一下：你更看重拍照、续航、性能还是性价比？"
+      }
+    }
+  ],
+  "default_question_template": "可以。我先确认一下：你对{subject}更看重什么场景、预算和品牌偏好吗？"
+}

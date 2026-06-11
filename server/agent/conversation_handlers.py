@@ -8,14 +8,20 @@ from server.agent.context import (
 )
 from server.agent.responses import build_done_payload, stream_text
 from server.agent.workflow import AgentTurnContext
+from server.nlu.clarification_policy import CategoryClarificationPolicy
 
 
 class ClarificationHandler:
+    def __init__(self, policy: CategoryClarificationPolicy | None = None) -> None:
+        self.policy = policy
+
     def matches(self, context: AgentTurnContext) -> bool:
-        return context.plan.intent == "clarify" or bool(get_clarification_subject(context.message, context.session))
+        return context.plan.intent == "clarify" or bool(
+            get_clarification_subject(context.message, context.session, self.policy, context.plan)
+        )
 
     async def handle(self, context: AgentTurnContext) -> AsyncIterator[dict]:
-        answer = build_clarification_question(context.message, context.session)
+        answer = build_clarification_question(context.message, context.session, self.policy, context.plan)
         if not answer:
             answer = build_plan_clarification_question(context)
         async for item in stream_text(answer):

@@ -23,9 +23,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
@@ -95,6 +97,7 @@ fun ChatRoute(viewModel: ChatViewModel = viewModel()) {
         onRefreshSessions = viewModel::refreshSessions,
         onOpenSession = viewModel::openSession,
         onResetSession = viewModel::resetSession,
+        onDeleteSession = viewModel::deleteSession,
     )
 }
 
@@ -122,8 +125,10 @@ fun ChatScreen(
     onRefreshSessions: () -> Unit,
     onOpenSession: (String) -> Unit,
     onResetSession: () -> Unit,
+    onDeleteSession: (String) -> Unit,
 ) {
     var selectedProduct by remember { mutableStateOf<ProductCard?>(null) }
+    var pendingDeleteSession by remember { mutableStateOf<ChatSessionSummary?>(null) }
     var showCart by remember { mutableStateOf(false) }
     val historyDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
@@ -168,6 +173,9 @@ fun ChatScreen(
                     onResetSession = {
                         onResetSession()
                         coroutineScope.launch { historyDrawerState.close() }
+                    },
+                    onDeleteSession = { session ->
+                        pendingDeleteSession = session
                     },
                 )
             }
@@ -265,6 +273,30 @@ fun ChatScreen(
         )
     }
 
+    pendingDeleteSession?.let { session ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteSession = null },
+            title = { Text("删除历史对话") },
+            text = {
+                Text("确定删除“${session.title.ifBlank { "新对话" }}”吗？删除后不会影响其他对话。")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteSession(session.sessionId)
+                        pendingDeleteSession = null
+                    },
+                ) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteSession = null }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -397,6 +429,7 @@ private fun HistoryDrawerContent(
     onNewSession: () -> Unit,
     onRefreshSessions: () -> Unit,
     onResetSession: () -> Unit,
+    onDeleteSession: (ChatSessionSummary) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -503,6 +536,7 @@ private fun HistoryDrawerContent(
                         session = session,
                         isActive = session.sessionId == activeSessionId,
                         onClick = { onOpenSession(session) },
+                        onDelete = { onDeleteSession(session) },
                     )
                 }
             }
@@ -534,6 +568,7 @@ private fun HistorySessionRow(
     session: ChatSessionSummary,
     isActive: Boolean,
     onClick: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Surface(
         modifier = Modifier
@@ -573,6 +608,13 @@ private fun HistorySessionRow(
                         text = "当前",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "删除历史对话",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -690,6 +732,7 @@ private fun ChatScreenPreview() {
             onRefreshSessions = {},
             onOpenSession = {},
             onResetSession = {},
+            onDeleteSession = {},
         )
     }
 }

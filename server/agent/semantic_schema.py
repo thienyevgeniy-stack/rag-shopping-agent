@@ -71,6 +71,7 @@ class SemanticPlan(BaseModel):
     query: str = ""
     presentation_mode: PresentationMode = "auto"
     query_understanding: dict[str, Any] = Field(default_factory=dict)
+    filled_slots: dict[str, Any] = Field(default_factory=dict)
     filters: list[SemanticFilter] = Field(default_factory=list)
     constraints: list[SemanticConstraint] = Field(default_factory=list)
     needs_search: bool = True

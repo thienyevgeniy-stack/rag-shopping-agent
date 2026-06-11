@@ -148,6 +148,36 @@ class ChatViewModel : ViewModel() {
         }
     }
 
+    fun deleteSession(targetSessionId: String) {
+        if (targetSessionId.isBlank() || _uiState.value.isStreaming) return
+
+        val deletingActiveSession = targetSessionId == sessionId
+        val nextSessions = _uiState.value.sessions.filterNot { it.sessionId == targetSessionId }
+        if (deletingActiveSession) {
+            sessionId = UUID.randomUUID().toString()
+            _uiState.value = ChatUiState(
+                sessions = nextSessions,
+                activeSessionId = sessionId,
+            )
+        } else {
+            _uiState.update {
+                it.copy(
+                    sessions = nextSessions,
+                    activeSessionId = sessionId,
+                )
+            }
+        }
+
+        viewModelScope.launch {
+            try {
+                repository.resetSession(targetSessionId)
+                refreshSessions()
+            } catch (_: Throwable) {
+                refreshSessions()
+            }
+        }
+    }
+
     fun newSession() {
         if (_uiState.value.isStreaming) return
         sessionId = UUID.randomUUID().toString()

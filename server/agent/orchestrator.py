@@ -9,6 +9,7 @@ from server.agent.workflow import AgentTurnContext, AgentWorkflow
 from server.agent.query_rewriter import rewrite_query
 from server.agent.query_feedback import QueryFeedbackStore, build_query_feedback_event
 from server.agent.semantic_llm import SemanticPlanner
+from server.agent.slot_state import update_session_slot_state
 from server.agent.scope_transition import ScopeTransitionPolicy
 from server.agent.tracing import InMemoryTraceStore, build_trace
 from server.inputs.base import TextProcessor
@@ -99,6 +100,7 @@ class Orchestrator:
             )
             self.scope_transition_policy.apply(session, scope_transition)
             session.merge_filters(extracted, auto_scope_reset=False)
+            update_session_slot_state(session, plan)
 
             intent = plan.to_user_intent()
             query = plan.query or rewrite_query(processed.text, session)
@@ -122,8 +124,12 @@ class Orchestrator:
                 context.metadata["query_understanding"] = plan.query_understanding
             context.metadata["nlu"] = {
                 "confidence_by_field": dict(plan.confidence_by_field),
+                "filled_slots": dict(plan.filled_slots),
+                "filled_slots_by_scope": dict(session.filled_slots_by_scope),
                 "evidence": dict(plan.evidence),
             }
+            if session.pending_clarification:
+                context.metadata["pending_clarification"] = dict(session.pending_clarification)
             context.metadata["scope_transition"] = scope_transition.as_metadata()
 
             async for item in self.workflow.stream(context):

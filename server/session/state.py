@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -37,6 +37,10 @@ class SessionState(BaseModel):
     candidate_products: list[str] = Field(default_factory=list)
     candidate_product_cards: list[dict] = Field(default_factory=list)
     pending_subject: str = ""
+    pending_clarification: dict[str, Any] = Field(default_factory=dict)
+    filled_slots_by_scope: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    clarification_counts: dict[str, int] = Field(default_factory=dict)
+    skipped_clarifications: list[str] = Field(default_factory=list)
     pending_cart_action: dict = Field(default_factory=dict)
     cart: list[dict] = Field(default_factory=list)
 
@@ -76,19 +80,81 @@ class SessionState(BaseModel):
         self.candidate_products = []
         self.candidate_product_cards = []
         self.pending_subject = ""
+        self.pending_clarification = {}
         self.pending_cart_action = {}
 
     def clear_product_constraints(self) -> None:
         self.filters = []
         self.exclusions = []
         self.pending_subject = ""
+        self.pending_clarification = {}
         self.pending_cart_action = {}
 
     def clear_product_candidates(self) -> None:
         self.candidate_products = []
         self.candidate_product_cards = []
         self.pending_subject = ""
+        self.pending_clarification = {}
         self.pending_cart_action = {}
+
+    def clarification_count_for(self, product_type: str) -> int:
+        return int(self.clarification_counts.get(product_type, 0))
+
+    def mark_clarification_asked(self, product_type: str) -> None:
+        if not product_type:
+            return
+        self.clarification_counts[product_type] = self.clarification_count_for(product_type) + 1
+
+    def mark_clarification_skipped(self, product_type: str) -> None:
+        if product_type and product_type not in self.skipped_clarifications:
+            self.skipped_clarifications.append(product_type)
+
+    def set_pending_clarification(
+        self,
+        *,
+        product_type: str,
+        subject: str,
+        rule_id: str,
+        requested_slots: list[str] | tuple[str, ...],
+    ) -> None:
+        self.pending_subject = subject
+        self.pending_clarification = {
+            "product_type": product_type,
+            "subject": subject,
+            "rule_id": rule_id,
+            "requested_slots": list(requested_slots),
+            "requested_slot": next(iter(requested_slots), ""),
+        }
+
+    def clear_pending_clarification(self) -> None:
+        self.pending_subject = ""
+        self.pending_clarification = {}
+
+    def remember_filled_slots(self, product_type: str, slots: dict[str, Any]) -> None:
+        if not product_type or not slots:
+            return
+        current = dict(self.filled_slots_by_scope.get(product_type, {}))
+        for key, value in slots.items():
+            if key == "product_type":
+                current.setdefault(key, value)
+                continue
+            if _slot_value_is_filled(value):
+                current[key] = value
+        if current:
+            self.filled_slots_by_scope[product_type] = current
+
+    def filled_slots_for_scope(self, product_type: str) -> dict[str, Any]:
+        return dict(self.filled_slots_by_scope.get(product_type, {}))
+
+
+def _slot_value_is_filled(value: Any) -> bool:
+    if value is None or value is False:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, set, dict)):
+        return bool(value)
+    return True
 
 
 class SessionRecord(BaseModel):

@@ -42,6 +42,7 @@ def latest_trace(session_id: str) -> dict:
 
 async def evaluate_case(case: dict) -> tuple[bool, list[TurnResult]]:
     session_id = f"eval-{case['case_id']}"
+    reset_eval_session(session_id)
     results: list[TurnResult] = []
     case_ok = True
     for turn in case["turns"]:
@@ -52,6 +53,12 @@ async def evaluate_case(case: dict) -> tuple[bool, list[TurnResult]]:
         case_ok = case_ok and ok
         results.append(TurnResult(ok=ok, failures=failures, events=events, trace=trace))
     return case_ok, results
+
+
+def reset_eval_session(session_id: str) -> None:
+    orchestrator = get_orchestrator()
+    if hasattr(orchestrator.sessions, "delete"):
+        orchestrator.sessions.delete(session_id)
 
 
 def check_expectations(expect: dict[str, Any], events: list[dict], trace: dict) -> list[str]:
@@ -90,6 +97,36 @@ def check_expectations(expect: dict[str, Any], events: list[dict], trace: dict) 
         if actual != expect["needs_clarification"]:
             failures.append(f"needs_clarification expected {expect['needs_clarification']}, got {actual}")
 
+    done_data = latest_done_data(events)
+    expected_pending = expect.get("pending_clarification", {})
+    if expected_pending:
+        actual_pending = done_data.get("pending_clarification", {}) if done_data else {}
+        for key, expected_value in expected_pending.items():
+            actual_value = actual_pending.get(key)
+            if isinstance(expected_value, list):
+                missing = [item for item in expected_value if item not in (actual_value or [])]
+                if missing:
+                    failures.append(f"pending_clarification.{key} missing {missing}, actual={actual_value}")
+            elif actual_value != expected_value:
+                failures.append(f"pending_clarification.{key} expected {expected_value!r}, got {actual_value!r}")
+
+    for slot in expect.get("plan_filled_slots", []):
+        if slot not in trace.get("plan", {}).get("filled_slots", {}):
+            failures.append(f"plan filled slot missing {slot}")
+
+    expected_scope_slots = expect.get("scope_filled_slots", {})
+    if expected_scope_slots:
+        actual_scope_slots = (
+            trace.get("metadata", {})
+            .get("nlu", {})
+            .get("filled_slots_by_scope", {})
+        )
+        for product_type, expected_slots in expected_scope_slots.items():
+            actual_slots = actual_scope_slots.get(product_type, {})
+            for slot in expected_slots:
+                if slot not in actual_slots:
+                    failures.append(f"scope {product_type} filled slot missing {slot}")
+
     actual_filters = trace.get("filters", {})
     expected_filters = expect.get("filters", {})
     for key, values in expected_filters.items():
@@ -121,6 +158,14 @@ def check_expectations(expect: dict[str, Any], events: list[dict], trace: dict) 
             failures.append(f"missing product card type {product_type}")
 
     return failures
+
+
+def latest_done_data(events: list[dict]) -> dict[str, Any]:
+    for item in reversed(events):
+        if item.get("event") == "done":
+            data = item.get("data", {})
+            return data if isinstance(data, dict) else {}
+    return {}
 
 
 def filter_values(value: Any) -> list[Any]:

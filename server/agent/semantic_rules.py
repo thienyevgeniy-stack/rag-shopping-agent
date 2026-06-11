@@ -4,6 +4,7 @@ from typing import Any
 from server.agent.context import extract_referenced_index, select_contextual_product
 from server.agent.filters import extract_filters, is_negated_term
 from server.agent.intent import UserIntent, detect_intent
+from server.agent.scenario_matching import has_explicit_bundle_request, looks_like_single_product_request
 from server.agent.scenarios import has_scenario_match
 from server.agent.semantic_schema import CartAction, SemanticConstraint, SemanticFilter, SemanticIntent, SemanticPlan
 from server.nlu.quantity import (
@@ -87,7 +88,13 @@ def build_rule_plan(message: str, session: SessionState) -> SemanticPlan:
         constraints=constraints,
         taxonomy=taxonomy,
         query_understanding=understanding.as_metadata(),
+        filled_slots=build_filled_slots(
+            filters=filters,
+            taxonomy=taxonomy,
+            quantity_parse=quantity_parse,
+        ),
     )
+    filled_slots = evidence.get("filled_slots", {})
 
     return SemanticPlan(
         intent=intent,
@@ -99,6 +106,7 @@ def build_rule_plan(message: str, session: SessionState) -> SemanticPlan:
         query=query,
         presentation_mode=understanding.presentation_mode,
         query_understanding=understanding.as_metadata(),
+        filled_slots=filled_slots if isinstance(filled_slots, dict) else {},
         filters=filters,
         constraints=dedupe_semantic_constraints(constraints),
         needs_search=needs_search,
@@ -166,6 +174,7 @@ def build_nlu_metadata(
     constraints: list[SemanticConstraint],
     taxonomy: TaxonomyClassification,
     query_understanding: dict[str, Any],
+    filled_slots: dict[str, Any],
 ) -> tuple[dict[str, float], dict[str, Any]]:
     confidence: dict[str, float] = {}
     evidence: dict[str, Any] = {
@@ -183,6 +192,7 @@ def build_nlu_metadata(
             }
             for item in constraints
         ],
+        "filled_slots": filled_slots,
     }
 
     if intent == "cart":
@@ -265,6 +275,84 @@ def build_nlu_metadata(
         evidence["cart_action"] = {"value": cart_action, "requires_reference": cart_action in {"add", "remove", "update_quantity"}}
 
     return confidence, evidence
+
+
+def build_filled_slots(
+    *,
+    filters: list[SemanticFilter],
+    taxonomy: TaxonomyClassification,
+    quantity_parse: QuantityParse | None,
+) -> dict[str, Any]:
+    slots: dict[str, Any] = {}
+
+    if taxonomy.product_types:
+        best_product_type = max(taxonomy.product_types, key=lambda item: item.confidence)
+        slots["product_type"] = {
+            "value": best_product_type.value,
+            "label": best_product_type.label,
+            "confidence": round(best_product_type.confidence, 4),
+            "source": best_product_type.source,
+            "span": best_product_type.evidence,
+        }
+
+    if taxonomy.categories:
+        best_category = max(taxonomy.categories, key=lambda item: item.confidence)
+        slots["category"] = {
+            "value": best_category.value,
+            "label": best_category.label,
+            "confidence": round(best_category.confidence, 4),
+            "source": best_category.source,
+            "span": best_category.evidence,
+        }
+
+    price_filters = [item for item in filters if item.kind in {"min_price", "max_price"}]
+    if price_filters:
+        slots["budget"] = {
+            "filters": [{"kind": item.kind, "value": item.value} for item in price_filters],
+            "source": "rule.price",
+        }
+
+    brand_filters = [item for item in filters if item.kind in {"brand", "preferred_brand", "exclude_brand"}]
+    if brand_filters:
+        slots["brand"] = {
+            "filters": [{"kind": item.kind, "value": item.value} for item in brand_filters],
+            "source": "rule.brand",
+        }
+
+    if any(item.kind == "in_stock" for item in filters):
+        slots["stock"] = {"value": "in_stock", "source": "rule.static_stock"}
+
+    service_filters = [item.value for item in filters if item.kind == "unsupported_service"]
+    if service_filters:
+        slots["service"] = {"values": service_filters, "source": "rule.service_not_integrated"}
+
+    facet_values: dict[str, list[str]] = {}
+    for item in filters:
+        if item.kind != "facet" or ":" not in item.value:
+            continue
+        field, value = item.value.split(":", 1)
+        facet_values.setdefault(field, []).append(value)
+    if facet_values:
+        slots["facet"] = facet_values
+        for field, values in facet_values.items():
+            slots[field] = {"values": values, "source": "rule.facet"}
+
+    preference_keywords = [item.value for item in filters if item.kind in {"keyword", "should_keyword"}]
+    if preference_keywords:
+        slots["preference"] = {
+            "values": preference_keywords,
+            "source": "rule.keyword",
+        }
+
+    if quantity_parse is not None:
+        slots["quantity"] = {
+            "value": quantity_parse.value,
+            "unit": quantity_parse.unit,
+            "source": quantity_parse.source,
+            "is_count": quantity_parse.is_count,
+        }
+
+    return slots
 
 
 def estimate_plan_confidence(confidence_by_field: dict[str, float]) -> float:
@@ -618,7 +706,11 @@ def map_rule_intent(
 
 
 def asks_for_bundle(message: str) -> bool:
-    return has_scenario_match(message)
+    if has_scenario_match(message):
+        return True
+    if looks_like_single_product_request(message):
+        return False
+    return has_explicit_bundle_request(message)
 
 
 def asks_for_new_search(message: str) -> bool:

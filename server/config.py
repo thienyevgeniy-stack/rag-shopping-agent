@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     upload_image_max_bytes: int = 4_500_000
     upload_image_ttl_seconds: int = 86_400
     scenario_bundle_path: str = "data/scenario_bundles.json"
+    clarification_policy_path: str = "data/clarification_policy.json"
     public_base_url: str = "http://127.0.0.1:8000"
     commerce_fact_backend: str = "mock"
     commerce_mock_data_path: str = "data/commerce_mock.json"
@@ -125,6 +126,11 @@ class Settings(BaseSettings):
     @property
     def scenario_bundle_file(self) -> Path:
         path = Path(self.scenario_bundle_path)
+        return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def clarification_policy_file(self) -> Path:
+        path = Path(self.clarification_policy_path)
         return path if path.is_absolute() else ROOT_DIR / path
 
     @property

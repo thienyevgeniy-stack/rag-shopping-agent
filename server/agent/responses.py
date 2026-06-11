@@ -40,6 +40,7 @@ def build_done_payload(
         "presentation_mode": presentation_mode,
         "needs_clarification": needs_clarification,
         "pending_subject": session.pending_subject,
+        "pending_clarification": dict(getattr(session, "pending_clarification", {}) or {}),
     }
     if trace_id:
         payload["trace_id"] = trace_id
