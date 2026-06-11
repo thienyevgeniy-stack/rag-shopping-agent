@@ -29,7 +29,7 @@ class ProductSearchExecution:
 
 class RecommendationHandler:
     def matches(self, context: AgentTurnContext) -> bool:
-        return True
+        return context.plan.intent in {"recommend", "browse"}
 
     async def handle(self, context: AgentTurnContext) -> AsyncIterator[dict]:
         product_search = context.registry.get("search_products")

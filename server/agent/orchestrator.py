@@ -5,6 +5,7 @@ from uuid import uuid4
 from server.agent.context import extract_contextual_filters
 from server.agent.filters import extract_filters
 from server.agent.default_handlers import build_default_workflow
+from server.agent.pending_clarification import apply_pending_clarification_scope
 from server.agent.workflow import AgentTurnContext, AgentWorkflow
 from server.agent.query_rewriter import rewrite_query
 from server.agent.query_feedback import QueryFeedbackStore, build_query_feedback_event
@@ -15,6 +16,7 @@ from server.agent.tracing import InMemoryTraceStore, build_trace
 from server.inputs.base import TextProcessor
 from server.inputs.multimodal import MultimodalInputProcessor
 from server.llm.ark_client import LLMClient
+from server.nlu.clarification_policy import CategoryClarificationPolicy, get_default_clarification_policy
 from server.rag.post_process import SearchFilters
 from server.session.memory import refresh_session_memory
 from server.session.state import PersistentSessionStore
@@ -29,6 +31,7 @@ class Orchestrator:
         llm_client: LLMClient | None = None,
         workflow: AgentWorkflow | None = None,
         semantic_planner: SemanticPlanner | None = None,
+        clarification_policy: CategoryClarificationPolicy | None = None,
         scope_transition_policy: ScopeTransitionPolicy | None = None,
         trace_store: InMemoryTraceStore | None = None,
         query_feedback_store: QueryFeedbackStore | None = None,
@@ -39,7 +42,8 @@ class Orchestrator:
         self.registry = registry
         self.sessions = sessions
         self.llm_client = llm_client
-        self.workflow = workflow or build_default_workflow()
+        self.clarification_policy = clarification_policy or get_default_clarification_policy()
+        self.workflow = workflow or build_default_workflow(clarification_policy=self.clarification_policy)
         self.semantic_planner = semantic_planner or SemanticPlanner()
         self.scope_transition_policy = scope_transition_policy or ScopeTransitionPolicy()
         self.trace_store = trace_store or InMemoryTraceStore()
@@ -90,6 +94,11 @@ class Orchestrator:
                 emitted.append(image_event)
                 yield image_event
             plan = await self.semantic_planner.plan(processed.text, session)
+            plan = apply_pending_clarification_scope(
+                plan,
+                session,
+                policy=self.clarification_policy,
+            )
             extracted = plan.to_filter_conditions()
             extracted.extend(extract_contextual_filters(processed.text, session, plan))
             scope_transition = self.scope_transition_policy.decide(
@@ -119,9 +128,13 @@ class Orchestrator:
                 llm_client=self.llm_client,
                 recommendation_llm_budget_seconds=self.recommendation_llm_budget_seconds,
                 retrieval_timeout_seconds=self.retrieval_timeout_seconds,
+                modality=processed.modality,
+                visual_matches=list(processed.visual_matches),
             )
             if plan.query_understanding:
                 context.metadata["query_understanding"] = plan.query_understanding
+            if plan.route_hints:
+                context.metadata["route_hints"] = dict(plan.route_hints)
             context.metadata["nlu"] = {
                 "confidence_by_field": dict(plan.confidence_by_field),
                 "filled_slots": dict(plan.filled_slots),
@@ -130,6 +143,12 @@ class Orchestrator:
             }
             if session.pending_clarification:
                 context.metadata["pending_clarification"] = dict(session.pending_clarification)
+            if processed.visual_matches:
+                context.metadata["visual_matches"] = {
+                    "count": len(processed.visual_matches),
+                    "product_ids": [str(item.get("id", "")) for item in processed.visual_matches if item.get("id")],
+                    "source": str(processed.visual_matches[0].get("visual_match_source", "")),
+                }
             context.metadata["scope_transition"] = scope_transition.as_metadata()
 
             async for item in self.workflow.stream(context):

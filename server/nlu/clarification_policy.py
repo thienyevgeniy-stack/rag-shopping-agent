@@ -121,6 +121,17 @@ class CategoryClarificationPolicy:
             )
         return None
 
+    def collect_filled_slots(
+        self,
+        product_type: str,
+        message: str,
+        filled_slots: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        rule = self._rules_by_product_type.get(product_type)
+        if rule is None:
+            return dict(filled_slots or {})
+        return self._collect_filled_slots(rule, message, dict(filled_slots or {}))
+
     def _trigger_applies(self, rule: ClarificationRule, message: str) -> bool:
         if rule.trigger_terms and not any(term in message for term in rule.trigger_terms):
             return False

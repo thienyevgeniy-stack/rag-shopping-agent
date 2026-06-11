@@ -27,6 +27,33 @@
         "budget": "可以。我先确认一下：预算大概是多少？",
         "use_case": "可以。我先确认一下：你更看重拍照、续航、性能还是性价比？"
       }
+    },
+    {
+      "id": "laptop_preference_probe",
+      "product_type": "electronics.laptop",
+      "subject": "笔记本",
+      "trigger_terms": ["推荐", "买", "想要", "需要"],
+      "required_slots": ["budget", "use_case"],
+      "optional_slots": ["brand", "performance", "portability", "screen"],
+      "ask_order": ["budget", "use_case"],
+      "max_clarifications": 1,
+      "allow_default_recommendation": false,
+      "slot_terms": {
+        "use_case": ["办公", "学习", "游戏", "设计", "剪辑", "编程", "出差", "轻薄", "生产力"],
+        "performance": ["性能", "游戏", "剪辑", "设计", "编程", "处理器"],
+        "portability": ["轻薄", "便携", "出差", "通勤"],
+        "screen": ["高刷", "大屏", "护眼", "屏幕"]
+      },
+      "slot_validators": {
+        "budget": {"type": "price", "min_value": 1, "max_value": 100000},
+        "use_case": {"type": "non_empty"}
+      },
+      "budget_regex": "\\d+\\s*(?:元|块)?\\s*(?:以内|以下|左右|预算)|预算\\s*(?:是|为|大概|约|在)?\\s*\\d+",
+      "question_templates": {
+        "budget,use_case": "可以。我先确认一下：笔记本预算大概是多少？主要用于办公、学习、游戏、设计剪辑还是编程？",
+        "budget": "可以。我先确认一下：笔记本预算大概是多少？",
+        "use_case": "可以。我先确认一下：主要用于办公、学习、游戏、设计剪辑还是编程？"
+      }
     }
   ],
   "default_question_template": "可以。我先确认一下：你对{subject}更看重什么场景、预算和品牌偏好吗？"

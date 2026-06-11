@@ -26,6 +26,8 @@ class AgentTurnContext:
     retrieval_timeout_seconds: float = 5.0
     selected_handler: str = ""
     scenario_match: object | None = None
+    modality: str = "text"
+    visual_matches: list[dict] = field(default_factory=list)
     metadata: dict[str, object] = field(default_factory=dict)
 
 

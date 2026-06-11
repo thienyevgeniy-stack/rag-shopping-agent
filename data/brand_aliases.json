@@ -89,6 +89,22 @@
     {
       "canonical": "理肤泉",
       "aliases": ["La Roche-Posay", "La Roche Posay"]
+    },
+    {
+      "canonical": "可口可乐",
+      "aliases": ["Coca-Cola", "Coca Cola", "零度可乐"]
+    },
+    {
+      "canonical": "元气森林",
+      "aliases": ["元气森林气泡水"]
+    },
+    {
+      "canonical": "蒙牛",
+      "aliases": ["特仑苏"]
+    },
+    {
+      "canonical": "伊利",
+      "aliases": ["金典"]
     }
   ]
 }

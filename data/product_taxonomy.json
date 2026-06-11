@@ -193,7 +193,7 @@
     {
       "id": "food.soda",
       "display_name": "碳酸饮料",
-      "aliases": ["碳酸饮料", "气泡水", "汽水", "苏打", "可口可乐"],
+      "aliases": ["碳酸饮料", "气泡水", "汽水", "苏打"],
       "query_aliases": ["无糖汽水", "无糖气泡水"],
       "match_fields": ["name", "sub_category", "tags"]
     },
@@ -214,7 +214,7 @@
     {
       "id": "food.milk",
       "display_name": "牛奶",
-      "aliases": ["牛奶", "纯牛奶", "有机纯牛奶", "特仑苏", "金典"],
+      "aliases": ["牛奶", "纯牛奶", "有机纯牛奶"],
       "query_aliases": ["盒装牛奶", "常温牛奶"],
       "match_fields": ["name", "sub_category", "tags"]
     },

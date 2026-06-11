@@ -144,6 +144,13 @@ class ScenarioBundleHandler:
         }
 
     def match(self, context: AgentTurnContext):
+        if context.plan.route_hints.get("pending_clarification_answer"):
+            context.metadata["scenario_routing"] = {
+                "matched": False,
+                "reason": "pending clarification answer keeps the active product scope",
+            }
+            return None
+
         if context.scenario_match is not None:
             return context.scenario_match
 

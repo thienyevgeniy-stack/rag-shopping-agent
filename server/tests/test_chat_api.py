@@ -482,7 +482,7 @@ def test_chat_generic_skincare_request_returns_skincare_cards() -> None:
 
 def test_chat_catalog_profile_category_requests_return_matching_cards() -> None:
     cases = [
-        ("推荐一台笔记本电脑", "electronics.digital", "数码电子"),
+        ("推荐一款平板电脑", "electronics.digital", "数码电子"),
         ("推荐一款酸奶", "food.beverage", "食品饮料"),
     ]
 

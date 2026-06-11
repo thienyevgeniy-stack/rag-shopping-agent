@@ -58,6 +58,7 @@ def get_orchestrator() -> Orchestrator:
         sessions=create_session_store(settings),
         llm_client=llm_client,
         workflow=build_default_workflow(scenario_catalog, clarification_policy),
+        clarification_policy=clarification_policy,
         semantic_planner=SemanticPlanner(
             semantic_client,
             timeout_seconds=settings.semantic_llm_budget_seconds,

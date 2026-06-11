@@ -156,6 +156,18 @@ def test_orchestrator_keeps_aligned_single_product_candidates_when_answer_has_no
     assert product_ids == ["alpha", "beta"]
 
 
+def test_orchestrator_routes_unresolved_context_question_to_fallback_not_recommendation() -> None:
+    orchestrator = make_orchestrator(cards=[PRODUCT_CARD], llm_client=None)
+
+    events = collect_events(orchestrator, "第二款怎么样")
+    traces = orchestrator.trace_store.list(session_id="pytest-llm", limit=1)
+
+    assert not any(item["event"] == "product_card" for item in events)
+    assert events[-1]["event"] == "done"
+    assert events[-1]["data"]["needs_clarification"] is True
+    assert traces[0].handler == "FallbackHandler"
+
+
 def test_orchestrator_falls_back_when_llm_answer_does_not_mention_products() -> None:
     first = {**PRODUCT_CARD, "id": "alpha", "name": "Alpha Running Shoe", "brand": "Alpha"}
     second = {**PRODUCT_CARD, "id": "beta", "name": "Beta Running Shoe", "brand": "Beta"}
