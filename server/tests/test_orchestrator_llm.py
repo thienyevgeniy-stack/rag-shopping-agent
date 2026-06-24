@@ -73,6 +73,8 @@ def make_orchestrator(
     llm_client: FakeLLMClient | None,
     sessions: SessionStore | SQLiteSessionStore | None = None,
     recommendation_llm_budget_seconds: float = 0.6,
+    recommendation_llm_async_enabled: bool = False,
+    recommendation_llm_async_budget_seconds: float = 20.0,
     semantic_planner: SemanticPlanner | None = None,
 ) -> Orchestrator:
     registry = ToolRegistry()
@@ -85,6 +87,8 @@ def make_orchestrator(
         sessions=sessions or SessionStore(),
         llm_client=llm_client,
         recommendation_llm_budget_seconds=recommendation_llm_budget_seconds,
+        recommendation_llm_async_enabled=recommendation_llm_async_enabled,
+        recommendation_llm_async_budget_seconds=recommendation_llm_async_budget_seconds,
         semantic_planner=semantic_planner,
     )
 
@@ -241,6 +245,63 @@ def test_orchestrator_does_not_block_first_screen_when_llm_is_slow() -> None:
     assert "我会优先推荐这款" in answer
     assert any(item["event"] == "product_card" for item in events)
     assert llm.calls
+
+
+def test_orchestrator_can_emit_async_llm_refinement_after_fast_cards() -> None:
+    card = {
+        **PRODUCT_CARD,
+        "id": "alpha",
+        "name": "Alpha Running Shoe",
+        "brand": "Alpha",
+        "price": 1299.0,
+        "reason": "Matches running shoe need",
+    }
+    llm = FakeLLMClient(tokens=["Alpha Running Shoe 符合1000元以上预算，是一个稳定选择。"])
+    orchestrator = make_orchestrator(
+        cards=[card],
+        llm_client=llm,
+        recommendation_llm_budget_seconds=0,
+        recommendation_llm_async_enabled=True,
+        recommendation_llm_async_budget_seconds=0.2,
+    )
+
+    events = collect_events(orchestrator, "推荐一款1000元以上的运动鞋")
+    event_names = [item["event"] for item in events]
+
+    assert "llm_refinement" in event_names
+    assert event_names.index("product_card") < event_names.index("llm_refinement") < event_names.index("done")
+    refinement = [item for item in events if item["event"] == "llm_refinement"][-1]
+    assert refinement["data"]["text"] == "Alpha Running Shoe 符合1000元以上预算，是一个稳定选择。"
+    assert llm.calls
+    traces = orchestrator.trace_store.list(session_id="pytest-llm", limit=1)
+    assert traces[0].metadata["llm_async_refinement"]["status"] == "accepted"
+
+
+def test_orchestrator_async_llm_refinement_times_out_without_delaying_fast_answer() -> None:
+    card = {
+        **PRODUCT_CARD,
+        "id": "alpha",
+        "name": "Alpha Running Shoe",
+        "brand": "Alpha",
+        "price": 1299.0,
+        "reason": "Matches running shoe need",
+    }
+    llm = FakeLLMClient(tokens=["Alpha Running Shoe should not appear late."], delay_seconds=0.05)
+    orchestrator = make_orchestrator(
+        cards=[card],
+        llm_client=llm,
+        recommendation_llm_budget_seconds=0,
+        recommendation_llm_async_enabled=True,
+        recommendation_llm_async_budget_seconds=0.001,
+    )
+
+    events = collect_events(orchestrator, "推荐一款1000元以上的运动鞋")
+
+    assert any(item["event"] == "product_card" for item in events)
+    assert not any(item["event"] == "llm_refinement" for item in events)
+    assert "Alpha Running Shoe should not appear late." not in token_text(events)
+    traces = orchestrator.trace_store.list(session_id="pytest-llm", limit=1)
+    assert traces[0].metadata["llm_async_refinement"]["status"] == "timeout"
 
 
 def test_orchestrator_guards_unsafe_llm_answer_before_streaming() -> None:

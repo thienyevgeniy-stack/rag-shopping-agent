@@ -23,6 +23,8 @@ class AgentTurnContext:
     registry: ToolRegistry
     llm_client: LLMClient | None
     recommendation_llm_budget_seconds: float = 0.0
+    recommendation_llm_async_enabled: bool = False
+    recommendation_llm_async_budget_seconds: float = 20.0
     retrieval_timeout_seconds: float = 5.0
     selected_handler: str = ""
     scenario_match: object | None = None

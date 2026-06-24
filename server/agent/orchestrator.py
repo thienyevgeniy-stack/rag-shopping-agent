@@ -37,6 +37,8 @@ class Orchestrator:
         query_feedback_store: QueryFeedbackStore | None = None,
         input_processor: TextProcessor | MultimodalInputProcessor | None = None,
         recommendation_llm_budget_seconds: float = 0.0,
+        recommendation_llm_async_enabled: bool = False,
+        recommendation_llm_async_budget_seconds: float = 20.0,
         retrieval_timeout_seconds: float = 5.0,
     ) -> None:
         self.registry = registry
@@ -50,6 +52,8 @@ class Orchestrator:
         self.query_feedback_store = query_feedback_store
         self.input_processor = input_processor or TextProcessor()
         self.recommendation_llm_budget_seconds = recommendation_llm_budget_seconds
+        self.recommendation_llm_async_enabled = recommendation_llm_async_enabled
+        self.recommendation_llm_async_budget_seconds = max(0.0, recommendation_llm_async_budget_seconds)
         self.retrieval_timeout_seconds = max(0.0, retrieval_timeout_seconds)
 
     async def stream_chat(
@@ -127,6 +131,8 @@ class Orchestrator:
                 registry=self.registry,
                 llm_client=self.llm_client,
                 recommendation_llm_budget_seconds=self.recommendation_llm_budget_seconds,
+                recommendation_llm_async_enabled=self.recommendation_llm_async_enabled,
+                recommendation_llm_async_budget_seconds=self.recommendation_llm_async_budget_seconds,
                 retrieval_timeout_seconds=self.retrieval_timeout_seconds,
                 modality=processed.modality,
                 visual_matches=list(processed.visual_matches),

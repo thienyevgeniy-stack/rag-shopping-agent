@@ -67,6 +67,8 @@ def get_orchestrator() -> Orchestrator:
         query_feedback_store=create_query_feedback_store(settings),
         input_processor=create_input_processor(settings),
         recommendation_llm_budget_seconds=settings.recommendation_llm_budget_seconds,
+        recommendation_llm_async_enabled=settings.recommendation_llm_async_enabled,
+        recommendation_llm_async_budget_seconds=settings.recommendation_llm_async_budget_seconds,
         retrieval_timeout_seconds=settings.retrieval_timeout_seconds,
     )
 
@@ -176,6 +178,7 @@ def create_llm_client(settings: Settings) -> LLMClient | None:
         base_url=settings.ark_base_url,
         model=settings.ark_model,
         timeout_seconds=settings.llm_timeout_seconds,
+        max_tokens=settings.llm_max_tokens,
         retry_attempts=settings.llm_retry_attempts,
         circuit_breaker_failures=settings.llm_circuit_breaker_failures,
         circuit_breaker_reset_seconds=settings.llm_circuit_breaker_reset_seconds,

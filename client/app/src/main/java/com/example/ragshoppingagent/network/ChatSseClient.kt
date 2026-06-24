@@ -201,6 +201,12 @@ class ChatSseClient(
                         "cart_update" -> onCart(CartState.fromJson(json))
                         "image_analysis" -> onImageAnalysis(json.optString("summary"))
                         "status" -> onStatus(json.optString("text"))
+                        "llm_refinement" -> {
+                            val text = json.optString("text")
+                            if (text.isNotBlank()) {
+                                onToken("\n\n$text")
+                            }
+                        }
                         "done" -> onDone()
                     }
                 }

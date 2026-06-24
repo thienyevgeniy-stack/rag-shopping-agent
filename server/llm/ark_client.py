@@ -26,6 +26,7 @@ class ArkChatClient:
         base_url: str,
         model: str,
         timeout_seconds: float = 45.0,
+        max_tokens: int = 256,
         retry_attempts: int = 2,
         circuit_breaker_failures: int = 3,
         circuit_breaker_reset_seconds: float = 30.0,
@@ -35,6 +36,7 @@ class ArkChatClient:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.max_tokens = max(1, max_tokens)
         self.retry_policy = RetryPolicy(attempts=retry_attempts)
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=circuit_breaker_failures,
@@ -78,6 +80,7 @@ class ArkChatClient:
             "model": self.model,
             "messages": messages,
             "temperature": 0.2,
+            "max_tokens": self.max_tokens,
             "stream": True,
         }
         headers = {

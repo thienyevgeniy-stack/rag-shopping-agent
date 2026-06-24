@@ -35,10 +35,13 @@ class Settings(BaseSettings):
     use_semantic_llm: bool = False
     semantic_llm_budget_seconds: float = 0.25
     llm_timeout_seconds: float = 45.0
+    llm_max_tokens: int = 256
     llm_retry_attempts: int = 2
     llm_circuit_breaker_failures: int = 3
     llm_circuit_breaker_reset_seconds: float = 30.0
     recommendation_llm_budget_seconds: float = 0.0
+    recommendation_llm_async_enabled: bool = False
+    recommendation_llm_async_budget_seconds: float = 20.0
     use_ark_embedding: bool = False
     ark_embedding_api: str = "text"
     ark_embedding_model: str = "doubao-embedding-text-240515"

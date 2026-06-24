@@ -422,7 +422,13 @@ USE_LLM=true
 ARK_API_KEY=your_key_here
 ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 ARK_MODEL=your_model_or_endpoint
+LLM_MAX_TOKENS=180
+RECOMMENDATION_LLM_BUDGET_SECONDS=0
+RECOMMENDATION_LLM_ASYNC_ENABLED=true
+RECOMMENDATION_LLM_ASYNC_BUDGET_SECONDS=35
 ```
+
+说明：当前演示推荐使用异步 LLM 增强模式。后端会先返回基于商品库的可验证推荐和商品卡片，再等待 LLM 追加自然导购说明；这样不会让手机端长时间停在“正在思考”。如果把 `RECOMMENDATION_LLM_BUDGET_SECONDS` 设为大于 0，推荐回答会等待 LLM 完整返回，首屏体验可能明显变慢。
 
 启用语义 Planner：
 

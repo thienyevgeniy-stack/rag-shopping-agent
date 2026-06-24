@@ -6,6 +6,7 @@ import logging
 import re
 
 from server.agent.grounding import guard_grounded_answer
+from server.agent.llm_refinement import allowed_filter_prices, collect_llm_refinement_after_fast_answer
 from server.agent.product_discovery import build_product_discovery_policy, resolve_product_cards_for_answer
 from server.agent.responses import (
     build_done_payload,
@@ -77,7 +78,7 @@ class RecommendationHandler:
                 answer=clean_answer_text(llm_answer),
                 cards=cards,
                 fallback_answer=fallback_answer,
-                allowed_extra_prices=[context.filters.max_price] if context.filters.max_price is not None else [],
+                allowed_extra_prices=allowed_filter_prices(context.filters),
             )
             if not guarded.safe:
                 yield {
@@ -129,10 +130,26 @@ class RecommendationHandler:
         async for item in stream_text(answer):
             yield item
 
-        context.session.add_assistant_message(answer)
-
         for card in cards:
             yield {"event": "product_card", "data": card}
+
+        assistant_record = answer
+        refinement = await collect_llm_refinement_after_fast_answer(
+            context=context,
+            cards=cards,
+            discovery_policy_allows_llm=discovery_policy.allow_llm_answer,
+        )
+        if refinement:
+            assistant_record = f"{answer}\n\n{refinement}"
+            yield {
+                "event": "llm_refinement",
+                "data": {
+                    "text": refinement,
+                    "answer_source": "llm_async_refinement",
+                },
+            }
+
+        context.session.add_assistant_message(assistant_record)
 
         yield {
             "event": "done",
